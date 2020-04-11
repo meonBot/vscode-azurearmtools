@@ -51,6 +51,10 @@ export namespace configKeys {
     export const codeLensForResourceParentsAndChildren = 'codelens.resourceChildren';
 }
 
+export namespace notifications {
+    export const openLinkedTemplate = 'arm-template/openLinkedFile';
+}
+
 export namespace globalStateKeys {
     // Set of files to not ask about using the newest schema
     export const dontAskAboutSchemaFiles = 'dontAskAboutSchemaFiles';
