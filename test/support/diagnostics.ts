@@ -26,6 +26,7 @@ import { rangeToString } from "./rangeToString";
 import { resolveInTestFolder } from "./resolveInTestFolder";
 import { stringify } from "./stringify";
 import { TempDocument, TempEditor, TempFile } from "./TempFile";
+import { testLog } from "./testLog";
 
 export const diagnosticsTimeout = 2 * 60 * 1000; // CONSIDER: Use this long timeout only for first test, or for suite setup
 
@@ -254,15 +255,15 @@ export interface IGetDiagnosticsOptions {
 }
 
 export async function testDiagnosticsFromFile(filePath: string | Partial<IDeploymentTemplate>, options: ITestDiagnosticsOptions, expected: ExpectedDiagnostics): Promise<void> {
-    await testDiagnosticsCore(filePath, options, expected);
+    await testDiagnosticsCore(filePath, 1, options, expected);
 }
 
 export async function testDiagnostics(templateContentsOrFileName: string | Partial<IDeploymentTemplate>, options: ITestDiagnosticsOptions, expected: ExpectedDiagnostics): Promise<void> {
-    await testDiagnosticsCore(templateContentsOrFileName, options, expected);
+    await testDiagnosticsCore(templateContentsOrFileName, 1, options, expected);
 }
 
-async function testDiagnosticsCore(templateContentsOrFileName: string | Partial<IDeploymentTemplate>, options: ITestDiagnosticsOptions, expected: ExpectedDiagnostics): Promise<void> {
-    let actual: IDiagnosticsResults = await getDiagnosticsForTemplate(templateContentsOrFileName, options);
+async function testDiagnosticsCore(templateContentsOrFileName: string | Partial<IDeploymentTemplate>, expectedMinimumVersionForEachSource: number, options: ITestDiagnosticsOptions, expected: ExpectedDiagnostics): Promise<void> {
+    let actual: IDiagnosticsResults = await getDiagnosticsForTemplate(templateContentsOrFileName, expectedMinimumVersionForEachSource, options);
     compareDiagnostics(actual.diagnostics, expected, options);
 }
 
@@ -273,6 +274,7 @@ export interface IDiagnosticsResults {
 
 export async function getDiagnosticsForDocument(
     document: TextDocument,
+    expectedMinimumVersionForEachSource: number,
     options: IGetDiagnosticsOptions,
     previousResults?: IDiagnosticsResults // If specified, will wait until the versions change and are completed
 ): Promise<IDiagnosticsResults> {
@@ -400,11 +402,21 @@ export async function getDiagnosticsForDocument(
         clearTimeout(timer);
     }
 
+    testLog.writeLine(`Diagnostics comlete:  ${stringify(diagnostics)}`);
+
+    // Verify the version of expectedMinimumVersionForEachSource
+    for (const source of Object.getOwnPropertyNames(diagnostics.sourceCompletionVersions)) {
+        if (!(diagnostics.sourceCompletionVersions[source] >= expectedMinimumVersionForEachSource)) {
+            assert.fail(`Expected diagnostics source to be at least 3, but found ${stringify(diagnostics)}`);
+        }
+    }
+
     return diagnostics;
 }
 
 export async function getDiagnosticsForTemplate(
     templateContentsOrFileName: string | Partial<IDeploymentTemplate>,
+    expectedMinimumVersionForEachSource: number,
     options?: IGetDiagnosticsOptions
 ): Promise<IDiagnosticsResults> {
     let templateContents: string | undefined;
@@ -464,7 +476,7 @@ export async function getDiagnosticsForTemplate(
         editor = new TempEditor(document);
         await editor.open();
 
-        let diagnostics: IDiagnosticsResults = await getDiagnosticsForDocument(document.realDocument, options);
+        let diagnostics: IDiagnosticsResults = await getDiagnosticsForDocument(document.realDocument, expectedMinimumVersionForEachSource, options);
         assert(diagnostics);
 
         await editor.dispose();
