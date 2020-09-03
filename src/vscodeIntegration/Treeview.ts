@@ -311,6 +311,8 @@ export class JsonOutlineProvider implements vscode.TreeDataProvider<string> {
 
         // Key is an object (e.g. a resource object)
         if (keyNode instanceof Json.ObjectValue) {
+            //asdf use new code
+
             // Object contains no elements
             if (keyNode.properties.length === 0) {
                 return "{}";
@@ -334,7 +336,7 @@ export class JsonOutlineProvider implements vscode.TreeDataProvider<string> {
                     return label;
                 }
 
-                label = this.getLabelFromProperties("namespace", keyNode);
+                label = this.getLabelFromProperties("namespace", keyNode); //asdf what's the namespace property?
                 if (label !== undefined) {
                     return label;
                 }
@@ -356,7 +358,8 @@ export class JsonOutlineProvider implements vscode.TreeDataProvider<string> {
         return "";
     }
 
-    private getLabelFromProperties(propertyName: string, keyNode: Json.ObjectValue): string | undefined {
+    //asdf what is this doing?
+    private getLabelFromProperties(propertyName: string, keyNode: Json.ObjectValue): string | undefined {//asdf ?
         // tslint:disable-next-line:one-variable-per-declaration
         for (var i = 0, l = keyNode.properties.length; i < l; i++) {
             let props = keyNode.properties[i];
@@ -595,6 +598,7 @@ export interface IElementInfo {
     };
 }
 
+//asdf
 /**
  * Shortens a label in a way intended to keep the important information but make it easier to read
  * and shorter (so you can read more in the limited horizontal space)

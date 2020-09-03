@@ -356,7 +356,7 @@ suite("ResourceInfo", () => {
             };
 
             const dt = await parseTemplate(template);
-            const infos = getResourcesInfo(dt.topLevelScope);
+            const infos = getResourcesInfo({ scope: dt.topLevelScope, recognizeDecoupledChildren: false });
 
             const actual = infos.map(info => ({
                 name: info.shortNameExpression,
