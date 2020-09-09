@@ -12,8 +12,10 @@ import * as path from 'path';
 import * as vscode from "vscode";
 import { armTemplateLanguageId, iconsPath, templateKeys } from "../constants";
 import { assert } from '../fixed_assert';
+import { getFriendlyExpressionFromJsonString } from '../language/expressions/getFriendlyExpressionFromJsonString';
 import * as Json from "../language/json/JSON";
 import { ContainsBehavior } from '../language/Span';
+import { isDoubleQuoted, isSingleQuoted, removeSingleQuotes } from '../util/strings';
 
 const topLevelIcons: [string, string][] = [
     ["$schema", "label.svg"],
@@ -304,7 +306,7 @@ export class JsonOutlineProvider implements vscode.TreeDataProvider<string> {
         return undefined;
     }
 
-    private getTreeNodeLabel(elementInfo: IElementInfo): string {
+    private getTreeNodeLabel(elementInfo: IElementInfo): string { //asdf
         const keyNode = this.tree && this.tree.getValueAtCharacterIndex(elementInfo.current.key.start, ContainsBehavior.strict);
 
         // Key is an object (e.g. a resource object)
@@ -598,33 +600,56 @@ export interface IElementInfo {
  * and shorter (so you can read more in the limited horizontal space)
  */
 export function shortenTreeLabel(label: string): string {
-    let originalLabel = label;
-
-    // If it's an expression - starts and ends with [], but doesn't start with [[, and at least one character inside the []
-    if (label && label.match(/^\[[^\[].*]$/)) {
-
-        //  variables/parameters('a') -> [a]
-        label = label.replace(/(variables|parameters)\('([^']+)'\)/g, '<$2>');
-
-        // concat(x,'y') => x,'y'
-        // Repeat multiple times for recursive cases
-        // tslint:disable-next-line:no-constant-condition
-        while (true) {
-            let newLabel = label.replace(/concat\((.*)\)/g, '$1');
-            if (label !== newLabel) {
-                label = newLabel;
-            } else {
-                break;
-            }
-        }
-
-        if (label !== originalLabel) {
-            // If we actually made changes, remove the brackets so users don't think this is the exact expression
-            return label.substr(1, label.length - 2);
-        }
+    if (typeof label !== 'string') {
+        return label;
     }
 
-    return originalLabel;
+    const friendlyExpression = getFriendlyExpressionFromJsonString(label);
+    if (isSingleQuoted(friendlyExpression)) {
+        return `"${removeSingleQuotes(friendlyExpression)}"`;
+    } else if (friendlyExpression.startsWith('${'/*asdf extract*/)) {
+        return `"${friendlyExpression}"`;
+    } else if (isDoubleQuoted(friendlyExpression)) {
+        return friendlyExpression;
+    } else {
+        return `[${friendlyExpression}]`;
+    }
+
+    //asdf
+    // let simplified = label;
+
+    // //asdf
+    // // If it's an expression - starts and ends with [], but doesn't start with [[, and at least one character inside the []
+    // if (simplified && simplified.match(/^\[[^\[].*]$/)) {
+
+    //     //  variables/parameters('a') -> ${a}
+    //     // tslint:disable-next-line: no-invalid-template-strings
+    //     simplified = simplified.replace(/(variables|parameters)\('([^']+)'\)/g, '$${$2}');
+
+    //     // concat(x,'y') => x,'y'
+    //     // Repeat multiple times for recursive cases
+    //     // tslint:disable-next-line:no-constant-condition
+    //     while (true) {
+    //         let newLabel = label.replace(/concat\((.*)\)/g, '$1');
+    //         if (label !== newLabel) {
+    //             label = newLabel;
+    //         } else {
+    //             break;
+    //         }
+    //     }
+
+    //     //asdf?
+    //     // if (expression !== originalLabel) {
+    //     //     // If we actually made changes, remove the brackets so users don't think this is the exact expression
+    //     //     return expression.substr(1, expression.length - 2);
+    //     // }
+
+    //     simplified = simplified.slice(1, simplified.length - 1); //asdf
+    //     //simplified = `"${simplified}"`;
+    //     return simplified;
+    // }
+
+    // return label;
 }
 
 function toFriendlyString(value: Json.Value | null | undefined): string {

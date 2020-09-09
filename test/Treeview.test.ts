@@ -3,7 +3,7 @@
 // ----------------------------------------------------------------------------
 
 // tslint:disable:max-func-body-length align max-line-length
-// tslint:disable:no-non-null-assertion
+// tslint:disable:no-non-null-assertion no-invalid-template-strings
 
 import * as assert from "assert";
 import * as fse from 'fs-extra';
@@ -15,32 +15,88 @@ import { getTempFilePath } from "./support/getTempFilePath";
 
 suite("TreeView", async (): Promise<void> => {
     suite("shortenTreeLabel", async (): Promise<void> => {
-        test("shortenTreeLabel", () => {
-            function testShorten(label: string | undefined, expected: string | undefined): void {
-                let shortenedLabel = shortenTreeLabel(label!);
-                assert.equal(shortenedLabel, expected);
+        suite("shortenTreeLabel", () => {
+            function createShortenTest(label: string | undefined, expected: string | undefined): void {
+                test(String(label), () => {
+                    let shortenedLabel = shortenTreeLabel(label!);
+                    assert.strictEqual(shortenedLabel, expected);
+                });
             }
 
-            testShorten(undefined, undefined);
+            createShortenTest(undefined, undefined);
             // tslint:disable-next-line:no-any
-            testShorten(<any>null, <any>null);
-            testShorten("", "");
-            testShorten("a", "a");
-            testShorten("[]", "[]");
-            testShorten("[parameter('a')]", "[parameter('a')]");
-            testShorten("[parameterss('a')]", "[parameterss('a')]");
+            createShortenTest(<any>null, <any>null);
+            createShortenTest("", "");
+            createShortenTest("a", "a");
+            createShortenTest("[]", "[]");
 
-            // params/vars
-            testShorten("[parameters('a')]", "<a>");
-            testShorten("[variables('a')]", "<a>");
-            testShorten("[(variables('a')+variables('abc'))]", "(<a>+<abc>)");
+            // Expressions that we don't know what to do with - just return original (with brackets)
+            createShortenTest("[parameter('a')]", `[parameter('a')]`);
+            createShortenTest("[parameterss('a')]", "[parameterss('a')]");
+            createShortenTest("[(variables('a')+variables('abc'))]", "(${a}+${abc})");
 
-            // concat
-            testShorten("[concat(a)]", "a");
-            testShorten("[concat(variables('a'),'b',variables('abc'))]", "<a>,'b',<abc>");
+            // just a param or just a var - return without brackets
+            createShortenTest("[parameters('a')]", "${a}");
+            createShortenTest("[variables('a')]", "${a}");
+
+            // If it's not a concat or just a var/param, then return with brackets
+            createShortenTest("[add(1, 2)]", "[add(1, 2)]");
+            createShortenTest("[add(1, concat(a))]", "add(1, a)");
+
+            // concat strings
+            createShortenTest("[concat('a', 'b')]", "ab");
+            createShortenTest("[concat(variables('sqlServer'), 'a')]", "${sqlServer}a");
+            createShortenTest("[concat(variables('a'),'b',variables('abc'))]", "${a}b${abc}");
+            createShortenTest("[concat(variables('sqlServer'), '/', variables('firewallRuleName2'))]", "${sqlServer}/${firewallRuleName2}");
+
+            // concat other things
+            createShortenTest("[concat(a)]", "a"); //asdf?
+            createShortenTest("[concat(a, 1)]", "asdf");
+            createShortenTest("[concat('a', 1)]", "asdf");
+            createShortenTest("[concat(1, 2)]", "asdf");
 
             // nested concat
-            testShorten("[concat(concat(a))]", "a");
+            createShortenTest("[concat(concat(a))]", "a");
+            createShortenTest("[concat('a', concat('b'), concat('c'))]", "abc"); //asdf
+
+            createShortenTest("format('{0}/default/logs', variables('storageAccountName'))", "asdf");
+            createShortenTest("{format('{0}/default/logs', ${storageAccountName}}", "asdf");
+
+            //asdf child-resources/children-nested.json
+            createShortenTest("AllowAllWindowsAzureIps", '"AllowAllWindowsAzureIps"');
+            createShortenTest("2019-06-01-preview", '"2019-06-01-preview"');
+            createShortenTest("[resourceGroup().location]", "[resourceGroup().location]"); //asdf
+            createShortenTest("[uniqueString(resourceGroup().id)]", "[uniqueString(resourceGroup().id)]"); //asdf
+
+            //asdf 101-sql-logical-server.json
+            createShortenTest("Microsoft.Storage/storageAccounts/providers/roleAssignments", "Microsoft.Storage/storageAccounts/providers/roleAssignments"); //asdf
+            createShortenTest("[concat(variables('storageName'), '/Microsoft.Authorization/', variables('uniqueRoleGuid') )]", "[concat(variables('storageName'), '/Microsoft.Authorization/', variables('uniqueRoleGuid') )]");
+            createShortenTest("[resourceGroup().name]", "[resourceGroup().name]");
+            createShortenTest("[tolower(concat('sqlva', variables('uniqueStorage')))]", "[tolower(concat('sqlva', variables('uniqueStorage')))]"); //asdf
+
+            // asdf copy-in-outputs3.json
+            createShortenTest("[concat(parameters('rgNamePrefix'),'-',parameters('rgEnvList')[copyIndex()])]", "[concat(parameters('rgNamePrefix'),'-',parameters('rgEnvList')[copyIndex()])]"); //asdf
+            createShortenTest("[concat('nic-', copyIndex())]", "[concat('nic-', copyIndex())]"); //asdf
+            createShortenTest("[array(json('[\"one\",\"two\",\"three\"]'))[copyIndex()]]", "[array(json('[\"one\",\"two\",\"three\"]'))[copyIndex()]]"); //asdf
+
+            createShortenTest("[if(parameters('globalRedundancy'), 'Standard_GRS', 'Standard_LRS')]", "[if(parameters('globalRedundancy'), 'Standard_GRS', 'Standard_LRS')]"); //asdf
+            createShortenTest("[format('{0}/default/logs', variables('storageAccountName'))]", "[format('{0}/default/logs', variables('storageAccountName'))]"); //asdf
+
+            //asdf icons.json
+            createShortenTest("[myFunctions.vmName(parameters('virtualMachineName'),copyindex(1))]", "[myFunctions.vmName(parameters('virtualMachineName'),copyindex(1))]"); //asdf
+            createShortenTest("[myFunctions.diskName(parameters('virtualMachineName'),copyindex(1))]", "[myFunctions.diskName(parameters('virtualMachineName'),copyindex(1))]"); //asdf
+            createShortenTest("[myFunctions.nicName(parameters('virtualMachineName'),copyindex(1))]", "[myFunctions.nicName(parameters('virtualMachineName'),copyindex(1))]"); //asdf
+
+            //asdf keyvalue-with-param.json
+            createShortenTest("[concat('sql-', uniqueString(resourceGroup().id, 'sql'))]", "[concat('sql-', uniqueString(resourceGroup().id, 'sql'))]"); //asdf
+
+            createShortenTest("[concat(parameters('storagePrefix'), uniqueString(resourceGroup().id))]", "[concat(parameters('storagePrefix'), uniqueString(resourceGroup().id))]"); //asdf
+            createShortenTest("[concat(parameters('storagePrefix'), uniqueString(parameters('secondSubscriptionID'), parameters('secondResourceGroup')))]", "[concat(parameters('storagePrefix'), uniqueString(parameters('secondSubscriptionID'), parameters('secondResourceGroup')))]"); //asdf
+
+            // outofbounds1.json
+            createShortenTest("[parameters('vmNames')[0]]", "[parameters('vmNames')[0]]"); //asdf
+            createShortenTest("[concat(parameters('vmProperties')[copyIndex()].name,'Deployment')]", "[concat(parameters('vmProperties')[copyIndex()].name,'Deployment')]"); //asdf
+            createShortenTest("[concat(parameters('projectName'),'sqlsrv/',variables('rdsDBName'))]", "[concat(parameters('projectName'),'sqlsrv/',variables('rdsDBName'))]"); //asdf
         });
     });
 

@@ -72,6 +72,10 @@ export abstract class Value {
 
     public abstract toString(): string;
 
+    public toFriendlyString(): string {
+        return this.toString();
+    }
+
     public abstract accept(visitor: Visitor): void;
 
     /**
@@ -466,20 +470,38 @@ export class FunctionCallValue extends ParentValue {
     }
 
     public toString(): string {
+        return this.getString(this.argumentExpressions.map(arg => arg?.toString() ?? ''));
+    }
+
+    public toFriendlyString(): string {
+        const fullNameLC = this.fullName.toLowerCase();
+        switch (fullNameLC) {
+            case 'concat':
+                const expr = coalesceConcatArguments(this.argumentExpressions);
+                return expr;
+
+            case 'variables':
+            case 'parameters':
+                if (this.argumentExpressions.length === 1) {
+                    const arg1 = this.argumentExpressions[0];
+                    if (arg1 instanceof StringValue) {
+                        // tslint:disable-next-line: prefer-template
+                        return "${" + arg1.unquotedValue + "}";
+                    }
+                }
+        }
+
+        return this.getString(this.argumentExpressions.map(arg => arg?.toFriendlyString() ?? ''));
+    }
+
+    private getString(expressionStrings: string[]): string {
         let result = this.fullName;
 
         if (!!this._leftParenthesisToken) {
             result += "(";
         }
 
-        for (let i = 0; i < this._argumentExpressions.length; ++i) {
-            const argExpr = this._argumentExpressions[i];
-
-            if (i > 0) {
-                result += ", ";
-            }
-            result += argExpr ? argExpr.toString() : "";
-        }
+        result += expressionStrings.join(', ');
 
         if (!!this._rightParenthesisToken) {
             result += ")";
@@ -487,6 +509,38 @@ export class FunctionCallValue extends ParentValue {
 
         return result;
     }
+}
+
+//asdf
+function coalesceConcatArguments(expressions: (Value | undefined)[]): string {
+    if (expressions.length < 2) {
+        return expressions[0]?.toFriendlyString() ?? '';
+    }
+
+    // Coalesce adjacent string literals
+    const coalescedExpressions: string[] = [];
+    const expressionsLength = expressions.length;
+    for (let i = 0; i < expressionsLength; ++i) {
+        let expression = expressions[i]?.toFriendlyString() ?? ''; //asdf
+        if (Utilities.isSingleQuoted(expression) || expression.startsWith('${')/*asdf extract*/) {
+            // Merge with last expression if it's also a string literal
+            const lastCoalescedExpression = coalescedExpressions[coalescedExpressions.length - 1];
+            if (lastCoalescedExpression && (Utilities.isSingleQuoted(lastCoalescedExpression) || lastCoalescedExpression.startsWith('${'))) {
+                coalescedExpressions[coalescedExpressions.length - 1] =
+                    `'${Utilities.removeSingleQuotes(lastCoalescedExpression)}${Utilities.removeSingleQuotes(expression)}'`;
+            } else {
+                coalescedExpressions.push(expression);
+            }
+        } else {
+            coalescedExpressions.push(expression);
+        }
+    }
+
+    if (coalescedExpressions.length < 2) {
+        return coalescedExpressions[0];
+    }
+
+    return `concat(${coalescedExpressions.join(', ')})`;
 }
 
 /**
