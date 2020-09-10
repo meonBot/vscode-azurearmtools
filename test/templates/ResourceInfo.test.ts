@@ -11,7 +11,7 @@ import { IPartialDeploymentTemplate } from "../support/diagnostics";
 import { parseTemplate } from "../support/parseTemplate";
 
 suite("ResourceInfo", () => {
-    suite("fullType", () => {
+    suite("fullTypeExpression", () => {
         function createFullTypeTest(
             typeSegmentExpressions: string[],
             expected: string | undefined
@@ -47,15 +47,51 @@ suite("ResourceInfo", () => {
         });
     });
 
-    suite("fullName", () => {
-        function createFullNameTest(
+    suite("shortTypeExpression", () => {
+        function createShortTypeTest(
             typeSegmentExpressions: string[],
             expected: string | undefined
         ): void {
             const testName = JSON.stringify(typeSegmentExpressions);
             test(testName, () => {
                 const ri = new ResourceInfo([], typeSegmentExpressions);
-                const typeName = ri.getFullTypeExpression();
+                const typeName = ri.shortTypeExpression;
+                assert.deepStrictEqual(typeName, expected);
+            });
+        }
+
+        createShortTypeTest([], undefined);
+        createShortTypeTest([`'a'`], `'a'`);
+        createShortTypeTest([`'ms.abc'`], `'ms.abc'`);
+        createShortTypeTest([`'ms.abc'`, `'def'`], `'def'`);
+        createShortTypeTest([`'ms.abc'`, `'def'`, `'ghi'`], `'ghi'`);
+
+        suite("expressions", () => {
+            createShortTypeTest([`parameters('abc')`], `parameters('abc')`);
+            createShortTypeTest([`parameters('abc')`, `'def'`], `'def'`);
+            createShortTypeTest([`'abc'`, `parameters('def')`], `parameters('def')`);
+            createShortTypeTest([`parameters('abc')`, `parameters('def')`], `parameters('def')`);
+            createShortTypeTest([`parameters('abc')`, `'def'`, `parameters('ghi')`], `parameters('ghi')`);
+        });
+
+        suite("coalesce consecutive strings", () => {
+            createShortTypeTest(
+                [
+                    `parameters('a')`, `'b'`, `'c'`, `'d'`, `parameters('e')`, `parameters('f')`, `'g'`, `'h'`
+                ],
+                `'h'`);
+        });
+    });
+
+    suite("fullNameExpression", () => {
+        function createFullNameTest(
+            nameSegmentExpressions: string[],
+            expected: string | undefined
+        ): void {
+            const testName = JSON.stringify(nameSegmentExpressions);
+            test(testName, () => {
+                const ri = new ResourceInfo(nameSegmentExpressions, []);
+                const typeName = ri.getFullNameExpression();
                 assert.deepStrictEqual(typeName, expected);
             });
         }
@@ -89,6 +125,54 @@ suite("ResourceInfo", () => {
                 ],
                 `concat(parameters('a'), '/b/c/d/', 123, '/', 456, '/', parameters('e'), '/', parameters('f'), '/g/h')`);
         });
+    });
+
+    suite("shortNameExpression", () => {
+        function createShortNameTest(
+            nameSegmentExpressions: string[],
+            expected: string | undefined
+        ): void {
+            const testName = JSON.stringify(nameSegmentExpressions);
+            test(testName, () => {
+                const ri = new ResourceInfo(nameSegmentExpressions, []);
+                const typeName = ri.shortNameExpression;
+                assert.deepStrictEqual(typeName, expected);
+            });
+        }
+
+        createShortNameTest([], undefined);
+        createShortNameTest([`'a'`], `'a'`);
+        createShortNameTest([`'abc'`, `'def'`], `'def'`);
+        createShortNameTest([`'abc'`, `'def'`, `'ghi'`], `'ghi'`);
+
+        suite("expressions", () => {
+            createShortNameTest([`parameters('abc')`], `parameters('abc')`);
+            createShortNameTest([`parameters('abc')`, `'def'`], `'def'`);
+            createShortNameTest([`'abc'`, `parameters('def')`], `parameters('def')`);
+            createShortNameTest([`parameters('abc')`, `parameters('def')`], `parameters('def')`);
+            createShortNameTest([`parameters('abc')`, `'def'`, `parameters('ghi')`], `parameters('ghi')`);
+        });
+
+        suite("coalesce consequence strings", () => {
+            createShortNameTest(
+                [
+                    `parameters('a')`,
+                    `'b'`,
+                    `'c'`,
+                    `'d'`,
+                    `123`,
+                    `456`,
+                    `parameters('e')`,
+                    `parameters('f')`,
+                    `'g'`,
+                    `'h'`
+                ],
+                `'h'`);
+        });
+    });
+
+    suite("getFriendlyName", () => {
+        //asdf
     });
 
     suite("getResourceIdExpression", () => {

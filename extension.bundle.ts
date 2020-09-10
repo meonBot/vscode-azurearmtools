@@ -50,6 +50,7 @@ export { UserFunctionParameterDefinition } from "./src/documents/templates/UserF
 export { isVariableDefinition, IVariableDefinition } from "./src/documents/templates/VariableDefinition";
 export { ext } from './src/extensionVariables';
 export * from './src/language/expressions/AzureRMAssets';
+export * from "./src/language/expressions/friendlyExpressions";
 export { FunctionSignatureHelp, TleParseResult } from "./src/language/expressions/TLE";
 export { DefinitionKind, INamedDefinition } from "./src/language/INamedDefinition";
 export { Issue } from "./src/language/Issue";

@@ -4,7 +4,7 @@
 // ---------------------------------------------------------------------------------------------
 
 import { templateKeys } from "../../constants";
-import { getFriendlyExpressionFromTleExpression } from "../../language/expressions/getFriendlyExpressionFromJsonString";
+import { getFriendlyExpressionFromTleExpression } from "../../language/expressions/friendlyExpressions";
 import { removeSingleQuotes } from "../../util/strings";
 import { IJsonResourceInfo } from "./getResourcesInfo";
 

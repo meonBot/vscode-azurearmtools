@@ -12,7 +12,7 @@ import * as path from 'path';
 import * as vscode from "vscode";
 import { armTemplateLanguageId, iconsPath, templateKeys } from "../constants";
 import { assert } from '../fixed_assert';
-import { getFriendlyExpressionFromJsonString } from '../language/expressions/getFriendlyExpressionFromJsonString';
+import { getFriendlyExpressionFromJsonString } from '../language/expressions/friendlyExpressions';
 import * as Json from "../language/json/JSON";
 import { ContainsBehavior } from '../language/Span';
 import { isDoubleQuoted, isSingleQuoted, removeSingleQuotes } from '../util/strings';

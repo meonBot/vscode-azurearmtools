@@ -30,34 +30,40 @@ export interface IResourceInfo {
     children: IResourceInfo[];
 
     /**
-     * The full reource name, split into segments (e.g. "sqlServer/firewallRule1" => ["sqlServer", "firewallRule1"]).
+     * The full reource name, split into segments (e.g. "'sqlServer/firewallRule1'" => ["'sqlServer'", "'firewallRule1'"]).
      * For nested child resources, the name of the parent will automatically be added if not specified in the child
      */
     nameSegmentExpressions: string[];
 
     /**
-     * The full reource type, split into segments (e.g. "Microsoft.sql/servers/firewallRules" => ["Microsoft.sql/servers", "firewallRules"]).
+     * The full reource type as a TLE expression, split into segments (e.g. "'Microsoft.sql/servers/firewallRules'" => ["'Microsoft.sql/servers'", "'firewallRules'"]).
      * For nested child resources, the type of the parent will automatically be added if not specified in the child
      */
     typeSegmentExpressions: string[];
 
     /**
-     * Provides just the last segment in the name
+     * Provides just the last segment in the name as a TLE expression
+     * @example "'firewallRule1'" (where the full name is "'Microsoft.sql/servers/firewallRules'")
+     * @example "[parameters('name')]" (where the full name is "[concat(parameters('parent'), '/', parameters('name'))]")
      */
     shortNameExpression: string | undefined;
 
     /**
-     * asdf
+     * Retrieves the last component of the type name as a TLE expression (does not including the RP name)
+     * @example "'firewallRules'" (where the full type name is "'Microsoft.sql/servers/firewallRules'")
+     * @example "[parameters('type')]" (where the full name is "[concat(parameters('RP'), '/', parameters('type'))]")
      */
     shortTypeExpression: string | undefined;
 
     /**
      * Gets the full name of the resource as a TLE expression
+     * @example "'Microsoft.sql/servers/firewallRules'"
      */
     getFullNameExpression(): string | undefined;
 
     /**
      * Gets the type name of the resource as a TLE expression
+     * @example "'Microsoft.sql/servers/firewallRules'"
      */
     getFullTypeExpression(): string | undefined;
 
@@ -65,8 +71,6 @@ export interface IResourceInfo {
      * Creates a resourceId expression to reference this resource
      */
     getResourceIdExpression(): string | undefined;
-
-    getFriendlyName(): string;
 }
 
 export interface IJsonResourceInfo extends IResourceInfo {
@@ -92,23 +96,23 @@ export class ResourceInfo implements IResourceInfo {
         }
     }
 
-    public getFriendlyName(): string {
-        throw new Error("Method not implemented."); //asdf
-    }
-
     public get shortNameExpression(): string {
         return this.nameSegmentExpressions[this.nameSegmentExpressions.length - 1];
     }
 
-    public get shortTypeExpression(): string | undefined { //asdf?
+    public get shortTypeExpression(): string | undefined {
         if (this.typeSegmentExpressions.length > 1) {
+            // Example: ["'Microsoft.sql/servers'", "'firewallRules'"]
+            // Short name is simply the last segment
             return this.typeSegmentExpressions[this.typeSegmentExpressions.length - 1];
         } else {
             const firstSegment = this.typeSegmentExpressions[0];
-            if (isSingleQuoted(firstSegment)) {
-                const a = removeSingleQuotes(firstSegment).replace(/.+\//, ''); //asdf
-                return a;
+
+            // Example: "'Microsoft.sql/servers'" -> "'servers'"
+            if (firstSegment && isSingleQuoted(firstSegment)) {
+                return firstSegment.replace(/.+\//, '');
             } else {
+                // It's an expression
                 return firstSegment;
             }
         }
