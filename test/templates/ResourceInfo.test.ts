@@ -6,7 +6,7 @@
 // tslint:disable: max-func-body-length object-literal-key-quotes
 
 import * as assert from "assert";
-import { getResourcesInfo, IResourceInfo, ResourceInfo } from "../../extension.bundle";
+import { getResourcesInfo, ResourceInfo } from "../../extension.bundle";
 import { IPartialDeploymentTemplate } from "../support/diagnostics";
 import { parseTemplate } from "../support/parseTemplate";
 
@@ -171,14 +171,78 @@ suite("ResourceInfo", () => {
         });
     });
 
-    suite("getFriendlyName", () => {
-        //asdf
+    suite("IResource getFriendlyName", () => {
+        function createFriendlyNameTest(
+            resource: ResourceInfo,
+            expected: string | undefined
+        ): void {
+            const testName = JSON.stringify(`${resource.getFullTypeExpression()}: ${resource.getFullNameExpression()}`);
+            test(testName, () => {
+                const actual = resource.getFriendlyName();
+                assert.deepStrictEqual(actual, expected);
+            });
+        }
+
+        createFriendlyNameTest(
+            // simple string name with parent
+            new ResourceInfo(
+                [`'parent name'`, `'my name'`],
+                [`'Microsoft.AAD/domainServices'`]),
+            `"my name" (domainServices)`);
+
+        // simple param/var name
+        createFriendlyNameTest(
+            new ResourceInfo(
+                ["variables('b')"],
+                [`'Microsoft.AAD/domainServices'`]),
+            // tslint:disable-next-line: no-invalid-template-strings
+            '${b} (domainServices)');
+
+        // interpolatable name
+        createFriendlyNameTest(
+            new ResourceInfo(
+                ["concat('prefix', '/', variables('b'))"],
+                [`'Microsoft.AAD/domainServices'`]),
+            // tslint:disable-next-line: no-invalid-template-strings
+            '"prefix/${b}" (domainServices)');
+
+        // name with expression
+        createFriendlyNameTest(
+            new ResourceInfo(
+                ["add(add(1, 2), '/', variables('b'))"],
+                [`'Microsoft.AAD/domainServices'`]),
+            // tslint:disable-next-line: no-invalid-template-strings
+            "[add(add(1, 2), '/', ${b})] (domainServices)");
+
+        // simple type name with parent
+        createFriendlyNameTest(
+            new ResourceInfo(
+                [`'my name'`],
+                [`'Microsoft.AAD/domainServices/abc'`]),
+            // tslint:disable-next-line: no-invalid-template-strings
+            "\"my name\" (abc)");
+
+        // type name with simple var/param
+        createFriendlyNameTest(
+            new ResourceInfo(
+                [`'my name'`],
+                [`variables('typeName')`]),
+            // tslint:disable-next-line: no-invalid-template-strings
+            "\"my name\" (${typeName})");
+
+        // type name with expression
+        createFriendlyNameTest(
+            new ResourceInfo(
+                [`'my name'`],
+                [`add(1, variables('typeName'))`]),
+            // tslint:disable-next-line: no-invalid-template-strings
+            "\"my name\" ([add(1, ${typeName})])");
     });
 
     suite("getResourceIdExpression", () => {
         function createResourceIdTest(
             testName: string,
-            resource: IResourceInfo,
+            resource: ResourceInfo,
             expected: string | undefined
         ): void {
             testName = testName + JSON.stringify(`${resource.getFullTypeExpression()}: ${resource.getFullNameExpression()}`);

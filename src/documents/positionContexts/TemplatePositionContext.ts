@@ -34,12 +34,14 @@ import { ICompletionItemsResult, IReferenceSite, PositionContext, ReferenceSiteK
  * Information about the TLE expression (if position is at an expression string)
  */
 class TleInfo implements ITleInfo {
+    public readonly scope: TemplateScope;
+
     public constructor(
         public readonly tleParseResult: TLE.TleParseResult,
         public readonly tleCharacterIndex: number,
-        public readonly tleValue: TLE.Value | undefined,
-        public readonly scope: TemplateScope
+        public readonly tleValue: TLE.Value | undefined
     ) {
+        this.scope = tleParseResult.propertyBag.get<TemplateScope>('scope'); //asdf
     }
 }
 
@@ -86,7 +88,7 @@ export class TemplatePositionContext extends PositionContext {
                 const tleParseResult = this.document.getTLEParseResultFromJsonStringValue(this.jsonValue);
                 const tleCharacterIndex = this.documentCharacterIndex - this.jsonTokenStartIndex;
                 const tleValue = tleParseResult.getValueAtCharacterIndex(tleCharacterIndex);
-                return new TleInfo(tleParseResult, tleCharacterIndex, tleValue, tleParseResult.scope);
+                return new TleInfo(tleParseResult, tleCharacterIndex, tleValue);
             }
             return undefined;
         });

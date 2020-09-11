@@ -22,6 +22,7 @@ import { CachedValue } from '../../util/CachedValue';
 import { expectParameterDocumentOrUndefined } from '../../util/expectDocument';
 import { Histogram } from '../../util/Histogram';
 import { nonNullValue } from '../../util/nonNull';
+import { PropertyBag } from '../../util/PropertyBag';
 import { FindReferencesVisitor } from "../../visitors/FindReferencesVisitor";
 import { FunctionCountVisitor } from "../../visitors/FunctionCountVisitor";
 import { GenericStringVisitor } from "../../visitors/GenericStringVisitor";
@@ -39,6 +40,8 @@ import { LinkedTemplateCodeLens, NestedTemplateCodeLen, ParameterDefinitionCodeL
 import { TemplateScope } from "./scopes/TemplateScope";
 import { NestedTemplateOuterScope, TopLevelTemplateScope } from './scopes/templateScopes';
 import { UserFunctionParameterDefinition } from './UserFunctionParameterDefinition';
+
+//asdf const scopeKey = 'scope';
 
 /**
  * Represents a deployment template file
@@ -110,19 +113,18 @@ export class DeploymentTemplateDoc extends DeploymentDocument {
             const jsonTokenStartIndex = jsonStringValue.span.startIndex;
 
             const tleParseResult: TLE.TleParseResult | undefined = this.getTLEParseResultFromJsonStringValue(jsonStringValue);
-            const expressionScope: TemplateScope = tleParseResult.scope;
+            const expressionScope: TemplateScope = tleParseResult?.propertyBag.get<TemplateScope>('scope'); //asdf
+            const tleExpression: TLE.Value | undefined = tleParseResult.expression;
 
             for (const error of tleParseResult.errors) {
                 parseErrors.push(error.translate(jsonTokenStartIndex));
             }
 
-            const tleExpression: TLE.Value | undefined = tleParseResult.expression;
-
             // Undefined parameter/variable references
             const tleUndefinedParameterAndVariableVisitor =
                 UndefinedParameterAndVariableVisitor.visit(
                     tleExpression,
-                    tleParseResult.scope);
+                    expressionScope);
             for (const error of tleUndefinedParameterAndVariableVisitor.errors) {
                 parseErrors.push(error.translate(jsonTokenStartIndex));
             }
@@ -134,7 +136,7 @@ export class DeploymentTemplateDoc extends DeploymentDocument {
             }
 
             // Incorrect number of function arguments
-            const tleIncorrectArgumentCountVisitor = IncorrectFunctionArgumentCountVisitor.IncorrectFunctionArgumentCountVisitor.visit(tleExpression, functions);
+            const tleIncorrectArgumentCountVisitor = IncorrectFunctionArgumentCountVisitor.IncorrectFunctionArgumentCountVisitor.visit(expressionScope, tleExpression, functions);
             for (const error of tleIncorrectArgumentCountVisitor.errors) {
                 parseErrors.push(error.translate(jsonTokenStartIndex));
             }
@@ -420,7 +422,9 @@ export class DeploymentTemplateDoc extends DeploymentDocument {
         // This string must not be in the reachable Json.Value tree due to syntax or other issues which
         //   the language server should show in our diagnostics.
         // Go ahead and parse it now, pretending it has top-level scope
-        const tleParseResult = TLE.Parser.parse(jsonStringValue.quotedValue, this.topLevelScope);
+        const bag = new PropertyBag();
+        bag.set('scope'/*asdf*/, this.topLevelScope);
+        const tleParseResult = TLE.Parser.parse(jsonStringValue.quotedValue, bag);
         this.quotedStringToTleParseResultMap.set(jsonStringValue, tleParseResult);
         return tleParseResult;
     }
@@ -439,7 +443,8 @@ export class DeploymentTemplateDoc extends DeploymentDocument {
             const tleParseResult: TLE.TleParseResult | undefined = this.getTLEParseResultFromJsonStringValue(jsonStringValue);
             if (tleParseResult.expression) {
                 // tslint:disable-next-line:no-non-null-assertion // Guaranteed by if
-                const visitor = FindReferencesVisitor.visit(this, tleParseResult.expression, definition, functions);
+                const scope = tleParseResult.propertyBag.get<TemplateScope>('scope'/*asdf*/);
+                const visitor = FindReferencesVisitor.visit(this, scope, tleParseResult.expression, definition, functions);
                 result.addAll(visitor.references.translate(jsonStringValue.span.startIndex));
             }
         });
@@ -625,7 +630,9 @@ class StringParseAndScopeAssignmentVisitor extends Json.Visitor {
     public visitStringValue(jsonStringValue: Json.StringValue): void {
         assert(!this._jsonStringValueToTleParseResultMap.has(jsonStringValue), "Already parsed this string");
         // Parse the string as a possible TLE expression and cache
-        let tleParseResult: TLE.TleParseResult = TLE.Parser.parse(jsonStringValue.quotedValue, this._currentScope);
+        const bag = new PropertyBag();
+        bag.set('scope'/*asdf*/, this._currentScope); //asdf make this construction easier
+        let tleParseResult: TLE.TleParseResult = TLE.Parser.parse(jsonStringValue.quotedValue, bag);
         this._jsonStringValueToTleParseResultMap.set(jsonStringValue, tleParseResult);
     }
 

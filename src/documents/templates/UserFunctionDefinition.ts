@@ -23,7 +23,7 @@ export function isUserFunctionDefinition(definition: INamedDefinition): definiti
 /**
  * This class represents the definition of a user-defined function in a deployment template.
  */
-export class UserFunctionDefinition implements INamedDefinition {
+export class UserFunctionDefinition implements INamedDefinition { //asdf
     private readonly _output: CachedValue<OutputDefinition | undefined> = new CachedValue<OutputDefinition | undefined>();
     private readonly _parameterDefinitions: CachedValue<UserFunctionParameterDefinition[]> = new CachedValue<UserFunctionParameterDefinition[]>();
     private readonly _scope: CachedValue<TemplateScope> = new CachedValue<TemplateScope>();

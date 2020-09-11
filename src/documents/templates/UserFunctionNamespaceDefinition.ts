@@ -21,7 +21,7 @@ export function isUserNamespaceDefinition(definition: INamedDefinition): definit
 /**
  * This class represents the definition of a user-defined namespace in a deployment template.
  */
-export class UserFunctionNamespaceDefinition implements INamedDefinition {
+export class UserFunctionNamespaceDefinition implements INamedDefinition { //asdf
     /* Example:
 
             "functions": [

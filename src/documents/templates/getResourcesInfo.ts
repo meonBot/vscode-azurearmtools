@@ -7,6 +7,7 @@ import { templateKeys } from "../../constants";
 import { assert } from "../../fixed_assert";
 import * as TLE from "../../language/expressions/TLE";
 import * as Json from "../../language/json/JSON";
+import { PropertyBag } from "../../util/PropertyBag";
 import { isSingleQuoted, removeSingleQuotes } from "../../util/strings";
 import { areDecoupledChildAndParent } from "./areDecoupledChildAndParent";
 import { getResourceFriendlyName } from "./getResourceFriendlyName";
@@ -35,6 +36,18 @@ export function getResourcesInfo(
 
     return [];
 }
+
+//asdf
+// /**
+//  * Get useful info about a single resource in a template, ignoring children and parents
+//  */
+// export function getResourceInfo(
+//     resourceObject: Json.ObjectValue
+// ): IJsonResourceInfo[] {
+//     const results: IJsonResourceInfo[] = [];
+//     getInfoFromResourceObject(resourceObject, undefined, EmptyScope.instance, results, false);
+//     return results;
+// }
 
 // tslint:disable-next-line: no-suspicious-comment
 // TODO: Consider combining with or hanging off of IResource. IResource currently only used for sorting templates and finding nested deployments? Nested subnets are not currently IResources but are IResourceInfos
@@ -93,6 +106,9 @@ export interface IResourceInfo {
      * Creates a resourceId expression to reference this resource
      */
     getResourceIdExpression(): string | undefined;
+
+    //asdf comment
+    getFriendlyName(): string;
 }
 
 export interface IJsonResourceInfo extends IResourceInfo {
@@ -105,18 +121,17 @@ export interface IJsonResourceInfo extends IResourceInfo {
      * The COPY element for this resource, if any
      */
     copyBlockElement: Json.ObjectValue | undefined;
-
-    //asdf comment
-    getFriendlyName(): string;
 }
 
 export class ResourceInfo implements IResourceInfo {
     public readonly children: IResourceInfo[] = [];
+
     public constructor(public readonly nameSegmentExpressions: string[], public readonly typeSegmentExpressions: string[], public readonly parent?: IResourceInfo) {
         if (parent) {
             parent.children.push(this);
         }
     }
+
     public isDecoupledChild: boolean = false;
 
     public get shortNameExpression(): string {
@@ -131,9 +146,10 @@ export class ResourceInfo implements IResourceInfo {
         } else {
             const firstSegment = this.typeSegmentExpressions[0];
 
-            // Example: "'Microsoft.sql/servers'" -> "'servers'"
             if (firstSegment && isSingleQuoted(firstSegment)) {
-                return firstSegment.replace(/.+\//, '');
+                // It's a string, remove the RP portion
+                // Example: "'Microsoft.sql/servers'" -> "'servers'"
+                return firstSegment.replace(/'.+\//g, "'");
             } else {
                 // It's an expression
                 return firstSegment;
@@ -158,18 +174,19 @@ export class ResourceInfo implements IResourceInfo {
 
         return undefined;
     }
+
+    public getFriendlyName(): string {
+        return getResourceFriendlyName({ resource: this });
+    }
 }
 
 export class JsonResourceInfo extends ResourceInfo implements IJsonResourceInfo {
     public constructor(nameSegmentExpressions: string[], typeSegmentExpressions: string[], public readonly resourceObject: Json.ObjectValue, parent: IJsonResourceInfo | undefined) {
         super(nameSegmentExpressions, typeSegmentExpressions, parent);
     }
+
     public get copyBlockElement(): Json.ObjectValue | undefined {
         return this.resourceObject.getPropertyValue(templateKeys.copyLoop)?.asObjectValue;
-    }
-
-    public getFriendlyName(): string {
-        return getResourceFriendlyName({ resource: this });
     }
 }
 
@@ -235,87 +252,93 @@ function getInfoFromResourcesArray(resourcesArray: Json.ArrayValue, parent: IJso
     for (let resourceValue of resourcesArray.elements ?? []) {
         const resourceObject = Json.asObjectValue(resourceValue);
         if (resourceObject) {
-            const resName = Json.asStringValue(resourceObject.getPropertyValue(templateKeys.resourceName));
-            const resType = Json.asStringValue(resourceObject.getPropertyValue(templateKeys.resourceType));
+            getInfoFromResourceObject(resourceObject, parent, scope, results, true);
+        }
+    }
 
-            if (resName && resType) {
-                let nameExpressions: string[];
-                let typeExpressions: string[];
+    return results;
+}
 
-                // If there's a parent, generally the type specified in the template
-                // is just the last segment, but it is allowed to put the full
-                // type there instead
-                const typeSegments = splitResourceTypeIntoSegments(resType.unquotedValue);
-                if (parent && typeSegments.length <= 1) {
-                    // Add to end of parent type segments
-                    typeExpressions = [...parent.typeSegmentExpressions, ...typeSegments];
-                } else {
-                    typeExpressions = typeSegments;
-                }
+function getInfoFromResourceObject(resourceObject: Json.ObjectValue, parent: IJsonResourceInfo | undefined, scope: TemplateScope, results: IJsonResourceInfo[], processChildren: boolean): void {
+    const resName = Json.asStringValue(resourceObject.getPropertyValue(templateKeys.resourceName));
+    const resType = Json.asStringValue(resourceObject.getPropertyValue(templateKeys.resourceType));
 
-                const nameSegments = splitResourceNameIntoSegments(resName.unquotedValue, scope);
-                if (parent && nameSegments.length <= 1) {
-                    // Add to end of parent name segments
-                    nameExpressions = [...parent.nameSegmentExpressions, ...nameSegments];
-                } else {
-                    nameExpressions = nameSegments;
-                }
+    if (resName && resType) {
+        let nameExpressions: string[];
+        let typeExpressions: string[];
 
-                const info: IJsonResourceInfo = new JsonResourceInfo(nameExpressions, typeExpressions, resourceObject, parent);
-                results.push(info);
+        // If there's a parent, generally the type specified in the template
+        // is just the last segment, but it is allowed to put the full
+        // type there instead
+        const typeSegments = splitResourceTypeIntoSegments(resType.unquotedValue);
+        if (parent && typeSegments.length <= 1) {
+            // Add to end of parent type segments
+            typeExpressions = [...parent.typeSegmentExpressions, ...typeSegments];
+        } else {
+            typeExpressions = typeSegments;
+        }
 
-                // Check child resources
-                const childResources = resourceObject.getPropertyValue(templateKeys.resources)?.asArrayValue;
-                if (childResources) {
-                    const childrenInfo = getInfoFromResourcesArray(childResources, info, scope);
-                    results.push(...childrenInfo);
-                }
+        const nameSegments = splitResourceNameIntoSegments(resName.unquotedValue, scope);
+        if (parent && nameSegments.length <= 1) {
+            // Add to end of parent name segments
+            nameExpressions = [...parent.nameSegmentExpressions, ...nameSegments];
+        } else {
+            nameExpressions = nameSegments;
+        }
 
-                // Special-case subnets - they were designed before nested resources were a thing.
-                // Subnets are considered children but are defined under properties/subnets instead of
-                //   a nested "resources"
-                // Example:
-                //
-                // "resources": [
-                //     {
-                //         "type": "Microsoft.Network/virtualNetworks",
-                //         "name": "vnet1",
-                //         "properties": {
-                //             "subnets": [
-                //                 // These are considered children, with type Microsoft.Network/virtualNetworks/subnets
-                //                 {
-                //                     "name": "subnet1",
-                //                 }
-                //             ]
-                //         }
-                //     }
-                // ]
-                if (resType.unquotedValue.toLowerCase() === 'microsoft.network/virtualnetworks') {
-                    const subnets = resourceObject.getPropertyValue(templateKeys.properties)?.asObjectValue
-                        ?.getPropertyValue('subnets')?.asArrayValue;
-                    for (let subnet of subnets?.elements ?? []) {
-                        const subnetObject = subnet.asObjectValue;
-                        const subnetName = subnetObject?.getPropertyValue(templateKeys.resourceName)?.asStringValue;
-                        if (subnetObject && subnetName) {
-                            const subnetTypes = [`'Microsoft.Network/virtualNetworks'`, `'subnets'`];
-                            const subnetInfo = new JsonResourceInfo(
-                                [
-                                    jsonStringToTleExpression(resName.unquotedValue),
-                                    jsonStringToTleExpression(subnetName.unquotedValue)
-                                ],
-                                subnetTypes,
-                                subnetObject,
-                                info
-                            );
-                            results.push(subnetInfo);
-                        }
+        const info: IJsonResourceInfo = new JsonResourceInfo(nameExpressions, typeExpressions, resourceObject, parent);
+        results.push(info);
+
+        if (processChildren) {
+            // Check child resources
+            const childResources = resourceObject.getPropertyValue(templateKeys.resources)?.asArrayValue;
+            if (childResources) {
+                const childrenInfo = getInfoFromResourcesArray(childResources, info, scope);
+                results.push(...childrenInfo);
+            }
+
+            // Special-case subnets - they were designed before nested resources were a thing.
+            // Subnets are considered children but are defined under properties/subnets instead of
+            //   a nested "resources"
+            // Example:
+            //
+            // "resources": [
+            //     {
+            //         "type": "Microsoft.Network/virtualNetworks",
+            //         "name": "vnet1",
+            //         "properties": {
+            //             "subnets": [
+            //                 // These are considered children, with type Microsoft.Network/virtualNetworks/subnets
+            //                 {
+            //                     "name": "subnet1",
+            //                 }
+            //             ]
+            //         }
+            //     }
+            // ]
+            if (resType.unquotedValue.toLowerCase() === 'microsoft.network/virtualnetworks') {
+                const subnets = resourceObject.getPropertyValue(templateKeys.properties)?.asObjectValue
+                    ?.getPropertyValue('subnets')?.asArrayValue;
+                for (let subnet of subnets?.elements ?? []) {
+                    const subnetObject = subnet.asObjectValue;
+                    const subnetName = subnetObject?.getPropertyValue(templateKeys.resourceName)?.asStringValue;
+                    if (subnetObject && subnetName) {
+                        const subnetTypes = [`'Microsoft.Network/virtualNetworks'`, `'subnets'`];
+                        const subnetInfo = new JsonResourceInfo(
+                            [
+                                jsonStringToTleExpression(resName.unquotedValue),
+                                jsonStringToTleExpression(subnetName.unquotedValue)
+                            ],
+                            subnetTypes,
+                            subnetObject,
+                            info
+                        );
+                        results.push(subnetInfo);
                     }
                 }
             }
         }
     }
-
-    return results;
 }
 
 function isJsonStringAnExpression(text: string): boolean {
@@ -356,7 +379,7 @@ export function splitResourceNameIntoSegments(nameUnquotedValue: string, scope: 
         // No sense taking time for parsing the expression if '/' is nowhere in the expression
         if (nameUnquotedValue.includes('/')) {
             const quotedValue = `"${nameUnquotedValue}"`;
-            const parseResult = TLE.Parser.parse(quotedValue, scope);
+            const parseResult = TLE.Parser.parse(quotedValue, new PropertyBag());
             const expression = parseResult.expression;
             if (parseResult.errors.length === 0 && expression) {
                 // Handle this pattern:
@@ -457,463 +480,6 @@ function splitResourceTypeIntoSegments(typeNameUnquotedValue: string): string[] 
     return segments.map(segment => `'${segment}'`);
 }
 
-// //asdf?
-// function expressionToFriendlyString(expression: string): string { //asdf pass in expression or json string?  Or either?  Need to distinguish the two better
-//     if (isSingleQuoted(expression)) {
-//         return removeSingleQuotes(expression); //asdf
-//     } else {
-//         return jsonStringToFriendlyString(`[${expression}]`); //asdf
-//     }
-// }
-
-// /**
-//  * Shortens a label in a way intended to keep the important information but make it easier to read
-//  * and shorter (so you can read more in the limited horizontal space)
-//  */
-// function jsonStringToFriendlyString(expression: string): string { //asdf pass in expression or json string?  Or either?  Need to distinguish the two better
-//     let simplified = expression;
-
-//     //asdf
-//     // If it's an expression - starts and ends with [], but doesn't start with [[, and at least one character inside the []
-//     if (simplified && simplified.match(/^\[[^\[].*]$/)) {
-
-//         //  variables/parameters('a') -> ${a}
-//         // tslint:disable-next-line: no-invalid-template-strings
-//         simplified = simplified.replace(/(variables|parameters)\('([^']+)'\)/g, '$${$2}');
-
-//         // concat(x,'y') => x,'y'
-//         // Repeat multiple times for recursive cases
-//         // tslint:disable-next-line:no-constant-condition
-//         while (true) {
-//             let newLabel = simplified.replace(/concat\((.*)\)/g, '$1');
-//             if (simplified !== newLabel) {
-//                 simplified = newLabel;
-//             } else {
-//                 break;
-//             }
-//         }
-
-//         //asdf?
-//         // if (expression !== originalLabel) {
-//         //     // If we actually made changes, remove the brackets so users don't think this is the exact expression
-//         //     return expression.substr(1, expression.length - 2);
-//         // }
-
-//         simplified = simplified.slice(1, simplified.length - 1); //asdf
-//         //simplified = `"${simplified}"`;
-//         return simplified;
-//     }
-
-//     return expression;
-// }
-
-// function getResourceFriendlyName(resource: IJsonResourceInfo): string { //asdf
-//     const resourceObject = resource.resourceObject;
-
-//     // Object contains no elements
-//     if (resource.resourceObject.properties.length === 0) {
-//         // shouldn't normally happen because getResourcesInfo ignores such resources
-//         return "(empty resource)";
-//     } else {
-//         // Object contains elements, look for displayName tag first
-//         // tslint:disable-next-line: strict-boolean-expressions
-//         let tags = resourceObject.getPropertyValue(templateKeys.tags)?.asObjectValue;
-//         let displayName = tags?.getPropertyValue(templateKeys.displayNameTag)?.asStringValue?.unquotedValue;
-//         if (displayName) {
-//             return displayName;
-//         }
-
-//         let nameLabel: string;
-//         const name = resource.shortNameExpression; //asdf  resourceObject.getPropertyValue(templateKeys.resourceName)?.asStringValue?.unquotedValue;
-//         if (name) {
-//             nameLabel = expressionToFriendlyString(name);
-//         } else {
-//             // shouldn't normally happen because getResourcesInfo ignores such resources
-//             nameLabel = "(unnamed resource)";
-//         }
-// // //asdf?
-// // function expressionToFriendlyString(expression: string): string { //asdf pass in expression or json string?  Or either?  Need to distinguish the two better
-// //     if (isSingleQuoted(expression)) {
-// //         return removeSingleQuotes(expression); //asdf
-// //     } else {
-// //         return jsonStringToFriendlyString(`[${expression}]`); //asdf
-// //     }
-// // }
-
-// // /**
-// //  * Shortens a label in a way intended to keep the important information but make it easier to read
-// //  * and shorter (so you can read more in the limited horizontal space)
-// //  */
-// // function jsonStringToFriendlyString(expression: string): string { //asdf pass in expression or json string?  Or either?  Need to distinguish the two better
-// //     let simplified = expression;
-
-// //     //asdf
-// //     // If it's an expression - starts and ends with [], but doesn't start with [[, and at least one character inside the []
-// //     if (simplified && simplified.match(/^\[[^\[].*]$/)) {
-
-// //         //  variables/parameters('a') -> ${a}
-// //         // tslint:disable-next-line: no-invalid-template-strings
-// //         simplified = simplified.replace(/(variables|parameters)\('([^']+)'\)/g, '$${$2}');
-
-// //         // concat(x,'y') => x,'y'
-// //         // Repeat multiple times for recursive cases
-// //         // tslint:disable-next-line:no-constant-condition
-// //         while (true) {
-// //             let newLabel = simplified.replace(/concat\((.*)\)/g, '$1');
-// //             if (simplified !== newLabel) {
-// //                 simplified = newLabel;
-// //             } else {
-// //                 break;
-// //             }
-// //         }
-
-// //         //asdf?
-// //         // if (expression !== originalLabel) {
-// //         //     // If we actually made changes, remove the brackets so users don't think this is the exact expression
-// //         //     return expression.substr(1, expression.length - 2);
-// //         // }
-
-// //         simplified = simplified.slice(1, simplified.length - 1); //asdf
-// //         //simplified = `"${simplified}"`;
-// //         return simplified;
-// //     }
-
-// //     return expression;
-// // }
-
-// // function getResourceFriendlyName(resource: IJsonResourceInfo): string { //asdf
-// //     const resourceObject = resource.resourceObject;
-
-// //     // Object contains no elements
-// //     if (resource.resourceObject.properties.length === 0) {
-// //         // shouldn't normally happen because getResourcesInfo ignores such resources
-// //         return "(empty resource)";
-// //     } else {
-// //         // Object contains elements, look for displayName tag first
-// //         // tslint:disable-next-line: strict-boolean-expressions
-// //         let tags = resourceObject.getPropertyValue(templateKeys.tags)?.asObjectValue;
-// //         let displayName = tags?.getPropertyValue(templateKeys.displayNameTag)?.asStringValue?.unquotedValue;
-// //         if (displayName) {
-// //             return displayName;
-// //         }
-
-// //         let nameLabel: string;
-// //         const name = resource.shortNameExpression; //asdf  resourceObject.getPropertyValue(templateKeys.resourceName)?.asStringValue?.unquotedValue;
-// //         if (name) {
-// //             nameLabel = expressionToFriendlyString(name);
-// //         } else {
-// //             // shouldn't normally happen because getResourcesInfo ignores such resources
-// //             nameLabel = "(unnamed resource)";
-// //         }
-
-// //         //asdf
-// //         // label = this.getLabelFromProperties("namespace", resourceObject);
-// //         // if (label !== undefined) {
-// //         //     return label;
-// //         // }
-
-// //         //asdflet typeLabel = resource.getFullTypeExpression() ?? "no type";
-// //         let typeLabel = resource.shortTypeExpression ?? '(no type)';
-// //         typeLabel = /*asdf expressionToFriendlyString*/ (typeLabel.replace(/microsoft\./ig, 'MS.')); //asdf
-// //         //typeLabel = expressionToFriendlyString(typeLabel); //asdf
-// //         typeLabel = removeSingleQuotes(typeLabel);
-
-// //         //asdf return `{${nameLabel}, ${typeLabel}}`;
-// //         //asdfreturn `${typeLabel} (${nameLabel})`;
-// //         return `"${nameLabel}" (${typeLabel})`;
-
-// //         //asdf    }
-
-// //         // } else if (elementInfo.current.value.kind === Json.ValueKind.ArrayValue || elementInfo.current.value.kind === Json.ValueKind.ObjectValue) {
-// //         //     // The value of the node is an array or object (e.g. properties or resources) - return key as the node label
-// //         //     return toFriendlyString(keyNode);
-// //         // } else if (elementInfo.current.value.start !== undefined) {
-// //         //     // For other value types, display key and value since they won't be expandable
-// //         //     const valueNode = this.tree && this.tree.getValueAtCharacterIndex(elementInfo.current.value.start, ContainsBehavior.strict);
-
-// //         //     return `${keyNode instanceof Json.StringValue ? toFriendlyString(keyNode) : "?"}: ${toFriendlyString(valueNode)}`;
-// //     }
-// // }
-
-// function findAndSetDecoupledChildren(infos: IJsonResourceInfo[]): void {
-//     const topLevel = infos.filter(info => !info.parent);
-//     const possibleParents = topLevel;
-//     const possibleChildren = topLevel.filter(info => !info.parent && info.nameSegmentExpressions.length > 1);
-
-//     for (const parent of possibleParents) { // Note: a resource could be a parent of multiple children (some nested, some decoupled)
-//         const removeIndices: number[] = [];
-//         possibleChildren.slice().forEach((child, index) => { // slice() makes a copy of the array so we can modify it while looping
-//             assert(!child.parent, "Should have been removed from the array already");
-//             if (areDecoupledChildAndParent(child, parent)) {
-//                 parent.children.push(child);
-//                 child.parent = parent;
-//                 child.isDecoupledChild = true;
-
-//                 // A resource can't have two parents (whether nested or decoupled), so remove from possibilities
-//                 //asdf   possibleChildren.splice(index, 1);
-//                 removeIndices.push(index);
-//             }
-//         });
-
-//         for (let i = removeIndices.length - 1; i >= 0; --i) {
-//             possibleChildren.splice(removeIndices[i], 1);
-//         }
-
-//         if (possibleChildren.length === 0) {
-//             break;
-//         }
-//     }
-// }
-
-// /**
-//  * Shortens a label in a way intended to keep the important information but make it easier to read
-//  * and shorter (so you can read more in the limited horizontal space)
-//  */
-// export function jsonStringToFriendlyString(expression: string): string { //asdf pass in expression or json string?  Or either?  Need to distinguish the two better
-//     let simplified = expression;
-
-//     //asdf
-//     // If it's an expression - starts and ends with [], but doesn't start with [[, and at least one character inside the []
-//     if (simplified && simplified.match(/^\[[^\[].*]$/)) {
-
-//         //  variables/parameters('a') -> ${a}
-//         // tslint:disable-next-line: no-invalid-template-strings
-//         simplified = simplified.replace(/(variables|parameters)\('([^']+)'\)/g, '$${$2}');
-
-//         // concat(x,'y') => x,'y'
-//         // Repeat multiple times for recursive cases
-//         // tslint:disable-next-line:no-constant-condition
-//         while (true) {
-//             let newLabel = simplified.replace(/concat\((.*)\)/g, '$1');
-//             if (simplified !== newLabel) {
-//                 simplified = newLabel;
-//             } else {
-//                 break;
-//             }
-//         }
-
-//         //asdf?
-//         // if (expression !== originalLabel) {
-//         //     // If we actually made changes, remove the brackets so users don't think this is the exact expression
-//         //     return expression.substr(1, expression.length - 2);
-//         // }
-
-//         simplified = simplified.slice(1, simplified.length - 1); //asdf
-//         //simplified = `"${simplified}"`;
-//         return simplified;
-//     }
-
-//     return expression;
-// }
-
-// //asdf?
-// function expressionToFriendlyString(expression: string): string { //asdf pass in expression or json string?  Or either?  Need to distinguish the two better
-//     if (isSingleQuoted(expression)) {
-//         return removeSingleQuotes(expression); //asdf
-//     } else {
-//         return jsonStringToFriendlyString(`[${expression}]`); //asdf
-//     }
-// }
-
-// /**
-//  * Shortens a label in a way intended to keep the important information but make it easier to read
-//  * and shorter (so you can read more in the limited horizontal space)
-//  */
-// function jsonStringToFriendlyString(expression: string): string { //asdf pass in expression or json string?  Or either?  Need to distinguish the two better
-//     let simplified = expression;
-
-//     //asdf
-//     // If it's an expression - starts and ends with [], but doesn't start with [[, and at least one character inside the []
-//     if (simplified && simplified.match(/^\[[^\[].*]$/)) {
-
-//         //  variables/parameters('a') -> ${a}
-//         // tslint:disable-next-line: no-invalid-template-strings
-//         simplified = simplified.replace(/(variables|parameters)\('([^']+)'\)/g, '$${$2}');
-
-//         // concat(x,'y') => x,'y'
-//         // Repeat multiple times for recursive cases
-//         // tslint:disable-next-line:no-constant-condition
-//         while (true) {
-//             let newLabel = simplified.replace(/concat\((.*)\)/g, '$1');
-//             if (simplified !== newLabel) {
-//                 simplified = newLabel;
-//             } else {
-//                 break;
-//             }
-//         }
-
-//         //asdf?
-//         // if (expression !== originalLabel) {
-//         //     // If we actually made changes, remove the brackets so users don't think this is the exact expression
-//         //     return expression.substr(1, expression.length - 2);
-//         // }
-
-//         simplified = simplified.slice(1, simplified.length - 1); //asdf
-//         //simplified = `"${simplified}"`;
-//         return simplified;
-//     }
-
-//     return expression;
-// }
-
-// function getResourceFriendlyName(resource: IJsonResourceInfo): string { //asdf
-//     const resourceObject = resource.resourceObject;
-
-//     // Object contains no elements
-//     if (resource.resourceObject.properties.length === 0) {
-//         // shouldn't normally happen because getResourcesInfo ignores such resources
-//         return "(empty resource)";
-//     } else {
-//         // Object contains elements, look for displayName tag first
-//         // tslint:disable-next-line: strict-boolean-expressions
-//         let tags = resourceObject.getPropertyValue(templateKeys.tags)?.asObjectValue;
-//         let displayName = tags?.getPropertyValue(templateKeys.displayNameTag)?.asStringValue?.unquotedValue;
-//         if (displayName) {
-//             return displayName;
-//         }
-
-//         let nameLabel: string;
-//         const name = resource.shortNameExpression; //asdf  resourceObject.getPropertyValue(templateKeys.resourceName)?.asStringValue?.unquotedValue;
-//         if (name) {
-//             nameLabel = expressionToFriendlyString(name);
-//         } else {
-//             // shouldn't normally happen because getResourcesInfo ignores such resources
-//             nameLabel = "(unnamed resource)";
-//         }
-
-//         //asdf
-//         // label = this.getLabelFromProperties("namespace", resourceObject);
-//         // if (label !== undefined) {
-//         //     return label;
-//         // }
-
-//         //asdflet typeLabel = resource.getFullTypeExpression() ?? "no type";
-//         let typeLabel = resource.shortTypeExpression ?? '(no type)';
-//         typeLabel = /*asdf expressionToFriendlyString*/ (typeLabel.replace(/microsoft\./ig, 'MS.')); //asdf
-//         //typeLabel = expressionToFriendlyString(typeLabel); //asdf
-//         typeLabel = removeSingleQuotes(typeLabel);
-
-//         //asdf return `{${nameLabel}, ${typeLabel}}`;
-//         //asdfreturn `${typeLabel} (${nameLabel})`;
-//         return `"${nameLabel}" (${typeLabel})`;
-
-//         //asdf    }
-
-//         // } else if (elementInfo.current.value.kind === Json.ValueKind.ArrayValue || elementInfo.current.value.kind === Json.ValueKind.ObjectValue) {
-//         //     // The value of the node is an array or object (e.g. properties or resources) - return key as the node label
-//         //     return toFriendlyString(keyNode);
-//         // } else if (elementInfo.current.value.start !== undefined) {
-//         //     // For other value types, display key and value since they won't be expandable
-//         //     const valueNode = this.tree && this.tree.getValueAtCharacterIndex(elementInfo.current.value.start, ContainsBehavior.strict);
-
-//         //     return `${keyNode instanceof Json.StringValue ? toFriendlyString(keyNode) : "?"}: ${toFriendlyString(valueNode)}`;
-//     }
-// }
-
-// //asdf?
-// function expressionToFriendlyString(expression: string): string { //asdf pass in expression or json string?  Or either?  Need to distinguish the two better
-//     if (isSingleQuoted(expression)) {
-//         return removeSingleQuotes(expression); //asdf
-//     } else {
-//         return jsonStringToFriendlyString(`[${expression}]`); //asdf
-//     }
-// }
-
-// /**
-//  * Shortens a label in a way intended to keep the important information but make it easier to read
-//  * and shorter (so you can read more in the limited horizontal space)
-//  */
-// function jsonStringToFriendlyString(expression: string): string { //asdf pass in expression or json string?  Or either?  Need to distinguish the two better
-//     let simplified = expression;
-
-//     //asdf
-//     // If it's an expression - starts and ends with [], but doesn't start with [[, and at least one character inside the []
-//     if (simplified && simplified.match(/^\[[^\[].*]$/)) {
-
-//         //  variables/parameters('a') -> ${a}
-//         // tslint:disable-next-line: no-invalid-template-strings
-//         simplified = simplified.replace(/(variables|parameters)\('([^']+)'\)/g, '$${$2}');
-
-//         // concat(x,'y') => x,'y'
-//         // Repeat multiple times for recursive cases
-//         // tslint:disable-next-line:no-constant-condition
-//         while (true) {
-//             let newLabel = simplified.replace(/concat\((.*)\)/g, '$1');
-//             if (simplified !== newLabel) {
-//                 simplified = newLabel;
-//             } else {
-//                 break;
-//             }
-//         }
-
-//         //asdf?
-//         // if (expression !== originalLabel) {
-//         //     // If we actually made changes, remove the brackets so users don't think this is the exact expression
-//         //     return expression.substr(1, expression.length - 2);
-//         // }
-
-//         simplified = simplified.slice(1, simplified.length - 1); //asdf
-//         //simplified = `"${simplified}"`;
-//         return simplified;
-//     }
-
-//     return expression;
-// }
-
-// function getResourceFriendlyName(resource: IJsonResourceInfo): string { //asdf
-//     const resourceObject = resource.resourceObject;
-
-//     // Object contains no elements
-//     if (resource.resourceObject.properties.length === 0) {
-//         // shouldn't normally happen because getResourcesInfo ignores such resources
-//         return "(empty resource)";
-//     } else {
-//         // Object contains elements, look for displayName tag first
-//         // tslint:disable-next-line: strict-boolean-expressions
-//         let tags = resourceObject.getPropertyValue(templateKeys.tags)?.asObjectValue;
-//         let displayName = tags?.getPropertyValue(templateKeys.displayNameTag)?.asStringValue?.unquotedValue;
-//         if (displayName) {
-//             return displayName;
-//         }
-
-//         let nameLabel: string;
-//         const name = resource.shortNameExpression; //asdf  resourceObject.getPropertyValue(templateKeys.resourceName)?.asStringValue?.unquotedValue;
-//         if (name) {
-//             nameLabel = expressionToFriendlyString(name);
-//         } else {
-//             // shouldn't normally happen because getResourcesInfo ignores such resources
-//             nameLabel = "(unnamed resource)";
-//         }
-
-//         //asdf
-//         // label = this.getLabelFromProperties("namespace", resourceObject);
-//         // if (label !== undefined) {
-//         //     return label;
-//         // }
-
-//         //asdflet typeLabel = resource.getFullTypeExpression() ?? "no type";
-//         let typeLabel = resource.shortTypeExpression ?? '(no type)';
-//         typeLabel = /*asdf expressionToFriendlyString*/ (typeLabel.replace(/microsoft\./ig, 'MS.')); //asdf
-//         //typeLabel = expressionToFriendlyString(typeLabel); //asdf
-//         typeLabel = removeSingleQuotes(typeLabel);
-
-//         //asdf return `{${nameLabel}, ${typeLabel}}`;
-//         //asdfreturn `${typeLabel} (${nameLabel})`;
-//         return `"${nameLabel}" (${typeLabel})`;
-
-//         //asdf    }
-
-//         // } else if (elementInfo.current.value.kind === Json.ValueKind.ArrayValue || elementInfo.current.value.kind === Json.ValueKind.ObjectValue) {
-//         //     // The value of the node is an array or object (e.g. properties or resources) - return key as the node label
-//         //     return toFriendlyString(keyNode);
-//         // } else if (elementInfo.current.value.start !== undefined) {
-//         //     // For other value types, display key and value since they won't be expandable
-//         //     const valueNode = this.tree && this.tree.getValueAtCharacterIndex(elementInfo.current.value.start, ContainsBehavior.strict);
-
-//         //     return `${keyNode instanceof Json.StringValue ? toFriendlyString(keyNode) : "?"}: ${toFriendlyString(valueNode)}`;
-//     }
-// }
-
 function findAndSetDecoupledChildren(infos: IJsonResourceInfo[]): void {
     const topLevel = infos.filter(info => !info.parent);
     const possibleParents = topLevel;
@@ -943,105 +509,3 @@ function findAndSetDecoupledChildren(infos: IJsonResourceInfo[]): void {
         }
     }
 }
-
-// //asdf
-// function expressionToFriendlyString(expression: string): string { //asdf pass in expression or json string?  Or either?  Need to distinguish the two better
-//     if (isSingleQuoted(expression)) {
-//         return removeSingleQuotes(expression); //asdf
-//     } else {
-//         return jsonStringToFriendlyString(`[${expression}]`); //asdf
-//     }
-// }
-
-// /**
-//  * Shortens a label in a way intended to keep the important information but make it easier to read
-//  * and shorter (so you can read more in the limited horizontal space)
-//  */
-// export function jsonStringToFriendlyString(expression: string): string { //asdf pass in expression or json string?  Or either?  Need to distinguish the two better
-//     let simplified = expression;
-
-//     //asdf
-//     // If it's an expression - starts and ends with [], but doesn't start with [[, and at least one character inside the []
-//     if (simplified && simplified.match(/^\[[^\[].*]$/)) {
-
-//         //  variables/parameters('a') -> ${a}
-//         // tslint:disable-next-line: no-invalid-template-strings
-//         simplified = simplified.replace(/(variables|parameters)\('([^']+)'\)/g, '$${$2}');
-
-//         // concat(x,'y') => x,'y'
-//         // Repeat multiple times for recursive cases
-//         // tslint:disable-next-line:no-constant-condition
-//         while (true) {
-//             let newLabel = simplified.replace(/concat\((.*)\)/g, '$1');
-//             if (simplified !== newLabel) {
-//                 simplified = newLabel;
-//             } else {
-//                 break;
-//             }
-//         }
-
-//         //asdf?
-//         // if (expression !== originalLabel) {
-//         //     // If we actually made changes, remove the brackets so users don't think this is the exact expression
-//         //     return expression.substr(1, expression.length - 2);
-//         // }
-
-//         simplified = simplified.slice(1, simplified.length - 1); //asdf
-//         //simplified = `"${simplified}"`;
-//         return simplified;
-//     }
-
-//     return expression;
-// }
-
-// export function getResourceFriendlyName(resource: IJsonResourceInfo): string { //asdf
-//     const resourceObject = resource.resourceObject;
-
-//     // Object contains no elements
-//     if (resource.resourceObject.properties.length === 0) {
-//         return "(empty resource)"; //asdf shouldn't happen
-//     } else {
-//         // Object contains elements, look for displayName tag first
-//         // tslint:disable-next-line: strict-boolean-expressions
-//         let tags = resourceObject.getPropertyValue(templateKeys.tags)?.asObjectValue;
-//         let displayName = tags?.getPropertyValue(templateKeys.displayNameTag)?.asStringValue?.unquotedValue;
-//         if (displayName) {
-//             return displayName;
-//         }
-
-//         let nameLabel: string;
-//         const name = resource.shortNameExpression; //asdf  resourceObject.getPropertyValue(templateKeys.resourceName)?.asStringValue?.unquotedValue;
-//         if (name) {
-//             nameLabel = expressionToFriendlyString(name);
-//         } else {
-//             nameLabel = "(unnamed resource)";
-//         }
-
-//         //asdf
-//         // label = this.getLabelFromProperties("namespace", resourceObject);
-//         // if (label !== undefined) {
-//         //     return label;
-//         // }
-
-//         //asdflet typeLabel = resource.getFullTypeExpression() ?? "no type";
-//         let typeLabel = resource.shortTypeExpression ?? '(no type)';
-//         typeLabel = /*asdf expressionToFriendlyString*/ (typeLabel.replace(/microsoft\./ig, 'MS.')); //asdf
-//         //typeLabel = expressionToFriendlyString(typeLabel); //asdf
-//         typeLabel = removeSingleQuotes(typeLabel);
-
-//         //asdf return `{${nameLabel}, ${typeLabel}}`;
-//         //asdfreturn `${typeLabel} (${nameLabel})`;
-//         return `"${nameLabel}" (${typeLabel})`;
-
-//         //asdf    }
-
-//         // } else if (elementInfo.current.value.kind === Json.ValueKind.ArrayValue || elementInfo.current.value.kind === Json.ValueKind.ObjectValue) {
-//         //     // The value of the node is an array or object (e.g. properties or resources) - return key as the node label
-//         //     return toFriendlyString(keyNode);
-//         // } else if (elementInfo.current.value.start !== undefined) {
-//         //     // For other value types, display key and value since they won't be expandable
-//         //     const valueNode = this.tree && this.tree.getValueAtCharacterIndex(elementInfo.current.value.start, ContainsBehavior.strict);
-
-//         //     return `${keyNode instanceof Json.StringValue ? toFriendlyString(keyNode) : "?"}: ${toFriendlyString(valueNode)}`;
-//     }
-// }

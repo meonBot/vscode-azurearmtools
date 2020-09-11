@@ -12,10 +12,11 @@ import { ext } from '../../extensionVariables';
 import { containsParametersSchema } from '../../schemas';
 import { normalizePath } from '../../util/normalizePath';
 import { pathExists } from '../../util/pathExists';
-import { DeploymentTemplateDoc } from '../templates/DeploymentTemplateDoc';
+import { DeploymentTemplateDoc } from '../templates/DeploymentTemplateDoc'; //asdf circular
 import { documentSchemes } from '../templates/supported';
 import { DeploymentFileMapping } from './DeploymentFileMapping';
 import { queryCreateParameterFile } from './parameterFileGeneration';
+import { getRelativeParameterFilePath } from './parameterFilePaths';
 
 const readAtMostBytesToFindParamsSchema = 4 * 1024;
 const currentMessage = "Current";
@@ -171,19 +172,6 @@ export function getFriendlyPathToFile(uri: Uri): string {
   } else {
     return uri.fsPath;
   }
-}
-
-export function getRelativeParameterFilePath(templateUri: Uri, parameterUri: Uri): string {
-  const templatePath = normalizePath(templateUri);
-  const paramPath = normalizePath(parameterUri);
-
-  return path.relative(path.dirname(templatePath), paramPath);
-}
-
-export function resolveParameterFilePath(templatePath: string, parameterPathRelativeToTemplate: string): string {
-  assert(path.isAbsolute(templatePath));
-  const resolved = path.resolve(path.dirname(templatePath), parameterPathRelativeToTemplate);
-  return resolved;
 }
 
 interface IQuickPickList {

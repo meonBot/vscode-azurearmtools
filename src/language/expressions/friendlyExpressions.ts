@@ -1,14 +1,11 @@
+import { PropertyBag } from "../../util/PropertyBag";
 // ---------------------------------------------------------------------------------------------
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License. See License.md in the project root for license information.
 // ---------------------------------------------------------------------------------------------
-// tslint:disable: no-duplicate-imports
-
-//asdf rename file
-
-import { EmptyScope } from "../../documents/templates/scopes/templateScopes";
 import { isSingleQuoted, removeDoubleQuotes } from "../../util/strings";
-import { isTleExpression, Parser } from "./TLE";
+import { isTleExpression } from "./isTleExpression";
+import { Parser } from "./TLE";
 
 /**
  * Given a JSON string that might or might not be a bracketed expression, return a friendly representation of that string
@@ -17,7 +14,7 @@ import { isTleExpression, Parser } from "./TLE";
  * @example '[variables('v1')]' => '${v1}'
  * @example '[variables('v1')]' => '${v1}'
  */
-export function getFriendlyExpressionFromJsonString(jsonString: string): string {
+export function getFriendlyExpressionFromJsonString(jsonString: string): string { //asdf needed?
     //asdf
     // If it's an expression - starts and ends with [], but doesn't start with [[, and at least one character inside the []
     if (isTleExpression(jsonString)) {
@@ -37,6 +34,12 @@ export function getFriendlyExpressionFromJsonString(jsonString: string): string 
  * @example 'concat(variables('a'), '/', func())' => '[${a}/func()]'
  */
 export function getFriendlyExpressionFromTleExpression(jsonString: string): string {
+    if (isSingleQuoted(jsonString)) {
+        // Just a regular string
+        // At the outermost layer, use double quotes instead of single quotes, to look more like the new string interolation notation
+        return replaceSingleQuotesWithDoubleQuotes(jsonString);
+    }
+
     const quotedBracketedJsonString = `"[${jsonString}]"`; //asdf
     return getFriendlyExpressionFromTleExpressionCore(quotedBracketedJsonString);
 
@@ -79,13 +82,24 @@ export function getFriendlyExpressionFromTleExpression(jsonString: string): stri
 // }
 // }
 
+//asdf
+// export class EmptyScope extends TemplateScope {
+//     public scopeKind: TemplateScopeKind = TemplateScopeKind.Empty;
+//     public static readonly instance: EmptyScope = new EmptyScope();
+
+//     private constructor() {
+//         super(new DeploymentTemplateDoc('', Uri.parse('https://emptydoc')), undefined, "Empty Scope");
+//     }
+// }
+
 function getFriendlyExpressionFromTleExpressionCore(doubleQuotedBracketedJsonString: string): string {
-    const pr = Parser.parse(doubleQuotedBracketedJsonString, new EmptyScope());
+    const bag = new PropertyBag();
+    const pr = Parser.parse(doubleQuotedBracketedJsonString, bag); //asdf?
     if (pr.expression && pr.errors.length === 0) {
         const friendly = pr.expression.toFriendlyString();
         if (isSingleQuoted(friendly)) {
             // At the outermost layer, use double quotes instead of single quotes, to look more like the new string interolation notation
-            return friendly.replace(/(^'|'$)/g, '"');
+            return replaceSingleQuotesWithDoubleQuotes(friendly);
         } else if (isParamOrVarInterpolation(friendly)) {
             // It's just a single param/var reference, return as is
             return friendly;
@@ -105,4 +119,8 @@ function getFriendlyExpressionFromTleExpressionCore(doubleQuotedBracketedJsonStr
  */
 export function isParamOrVarInterpolation(s: string): boolean {
     return !!s.match(/^\${[^{}]+}$/);
+}
+
+function replaceSingleQuotesWithDoubleQuotes(s: string): string {
+    return s.replace(/(^'|'$)/g, '"');
 }
