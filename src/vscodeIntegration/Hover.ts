@@ -21,6 +21,7 @@ export class HoverInfo {
     }
 
     public getHoverText(): string {
+        //let info = `### ${this._usageInfo.usage}${os.EOL}*(${this._usageInfo.friendlyType})*`;
         let info = `**${this._usageInfo.usage}**${os.EOL}*(${this._usageInfo.friendlyType})*`;
         const description = this._usageInfo.description;
         if (description) {

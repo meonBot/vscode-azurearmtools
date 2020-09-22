@@ -136,6 +136,49 @@ export class AzureRMTools {
     private _mapping: DeploymentFileMapping = ext.deploymentFileMapping.value;
     private _codeLensChangedEmitter: vscode.EventEmitter<void> = new vscode.EventEmitter<void>();
 
+    private readonly dec1: vscode.TextEditorDecorationType = vscode.window.createTextEditorDecorationType({
+        textDecoration: "line-through",
+    });
+    private readonly dec2: vscode.TextEditorDecorationType = vscode.window.createTextEditorDecorationType({
+        //after: { contentText: " exactly", },
+        after: {
+            contentIconPath: '/Users/stephenweatherford/repos/vscode-azurearmtools/icons/resources.svg',
+            width: "14px",
+            height: "14px"
+
+        },
+        overviewRulerColor: "red",
+        overviewRulerLane: vscode.OverviewRulerLane.Right,
+        gutterIconPath: '/Users/stephenweatherford/repos/vscode-azurearmtools/icons/cosmosdb.svg',
+        gutterIconSize: "contain"
+    });
+
+    //     function lineRange(line, start, end) { return new vscode.Range(line,start,line,end) }
+    //   const editor = vscode.window.activeTextEditor;
+    //   if (editor) {
+    //     const lines = [
+    //       "--- some-text --- (no decoration)",
+    //       "--- some-text --- (line-through)",
+    //       "--- some-text --- (line-through & :after)",
+    //             "aaaaaa",
+    //             "aaaaaa",
+    //             "aaaaaa",
+    //             "aaaaaa",
+    //             "aaaaaa",
+    //             "aaaaaa",
+    //             "aaaaaa",
+    //             "aaaaaa",
+    //             "aaaaaa",
+    //             "aaaaaa",
+    //             "END OF EXAMPLE", "", "", ]
+    //     editor.edit((edit) => {
+    //       edit.insert(new vscode.Position(0,0), lines.join('\n'));
+    //     }).then(() => {
+    //       editor.setDecorations(dec1, [lineRange(1,4,13), lineRange(2,4,13)]);
+    //       editor.setDecorations(dec2, [lineRange(2,4,13)]);
+    //     });
+    //   }
+
     // More information can be found about this definition at https://code.visualstudio.com/docs/extensionAPI/vscode-api#DecorationRenderOptions
     // Several of these properties are CSS properties. More information about those can be found at https://www.w3.org/wiki/CSS/Properties
     private readonly _braceHighlightDecorationType: vscode.TextEditorDecorationType = vscode.window.createTextEditorDecorationType({
@@ -143,11 +186,13 @@ export class AzureRMTools {
         borderStyle: "solid",
         light: {
             borderColor: "rgba(0, 0, 0, 0.2)",
-            backgroundColor: "rgba(0, 0, 0, 0.05)"
+            //asdf backgroundColor: "rgba(0, 0, 0, 0.05)"
+            backgroundColor: "rgba(0, 0, 0, 1)"
         },
         dark: {
             borderColor: "rgba(128, 128, 128, 0.5)",
-            backgroundColor: "rgba(128, 128, 128, 0.1)"
+            //asdf backgroundColor: "rgba(128, 128, 128, 0.1)"
+            backgroundColor: "rgba(128, 128, 128, 1)"
         }
     });
 
@@ -860,7 +905,13 @@ export class AzureRMTools {
                     return await this.onProvideHover(document, position, token);
                 }
             };
-            ext.context.subscriptions.push(vscode.languages.registerHoverProvider(templateDocumentSelector, hoverProvider));
+            const hoverProvider2: vscode.HoverProvider = {
+                provideHover: async (document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken): Promise<vscode.Hover | undefined> => {
+                    return await this.onProvideHover2(document, position, token);
+                }
+            };
+            ext.context.subscriptions.push(vscode.languages.registerHoverProvider(templateDocumentSelector, hoverProvider2));
+            ext.context.subscriptions.push(vscode.languages.registerHoverProvider(templateDocumentSelector, hoverProvider)); //asdf
 
             const codeLensProvider = {
                 onDidChangeCodeLenses: this._codeLensChangedEmitter.event,
@@ -1209,8 +1260,50 @@ export class AzureRMTools {
                 if (hoverInfo) {
                     properties.hoverType = hoverInfo.friendlyType;
                     const hoverRange: vscode.Range = getVSCodeRangeFromSpan(doc, hoverInfo.span);
-                    const hover = new vscode.Hover(hoverInfo.getHoverText(), hoverRange);
+                    const strings: vscode.MarkdownString[] = [];
+                    strings.push(new vscode.MarkdownString(hoverInfo.getHoverText()));
+                    if (context instanceof TemplatePositionContext) {
+                        const expr = context.tleInfo?.tleParseResult.expression?.toString();
+                        if (expr) {
+                            const s = new vscode.MarkdownString();
+                            s.appendCodeblock(`"${expr}"`, 'arm-template');
+                            //strings.push(s); asdf
+                        }
+                    }
+                    const hover = new vscode.Hover(strings, hoverRange);
                     return hover;
+                }
+            }
+
+        });
+    }
+
+    private async onProvideHover2(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken): Promise<vscode.Hover | undefined> {
+        return await callWithTelemetryAndErrorHandling('Hover', async (actionContext: IActionContext): Promise<vscode.Hover | undefined> => {  //asdf
+            actionContext.errorHandling.suppressDisplay = true;
+            actionContext.telemetry.suppressIfSuccessful = true;
+            //asdf const properties = <TelemetryProperties & { hoverType?: string; tleFunctionName: string }>actionContext.telemetry.properties;
+
+            const cancel = new Cancellation(token, actionContext);
+            const { doc, associatedDoc } = await this.getDeploymentDocAndAssociatedDoc(document, cancel); //asdf optimize
+            if (doc) {
+                //asdf properties.hoverType = hoverInfo.friendlyType;
+                const context = doc.getContextFromDocumentLineAndColumnIndexes(position.line, position.character, associatedDoc);
+                if (context instanceof TemplatePositionContext) {
+                    const expr = context.tleInfo?.tleParseResult.expression;
+                    if (expr) {
+                        const exprString = expr.toString2(0, 20); //asdf
+                        //asdf const hoverRange: vscode.Range = getVSCodeRangeFromSpan(doc, expr.getSpan());
+                        const s = new vscode.MarkdownString();
+                        s.isTrusted = true;
+
+                        // Only trusted markdown supports links that execute commands, e.g. `[Run it](command:myCommandId)`.
+
+                        //s.appendMarkdown("### Full expression");
+                        //s.appendMarkdown("**Full expression**");
+                        s.appendCodeblock(`"[${exprString}\n]"`, 'arm-template');
+                        return new vscode.Hover(s); //asdf , hoverRange);
+                    }
                 }
             }
 
@@ -1627,7 +1720,7 @@ export class AzureRMTools {
         });
     }
 
-    private async onTextSelectionChanged(): Promise<void> {
+    private async onTextSelectionChanged(evt: vscode.TextEditorSelectionChangeEvent): Promise<void> {
         await callWithTelemetryAndErrorHandling('onTextSelectionChanged', async (actionContext: IActionContext): Promise<void> => {
             actionContext.telemetry.properties.isActivationEvent = 'true';
             actionContext.errorHandling.suppressDisplay = true;
@@ -1647,10 +1740,53 @@ export class AzureRMTools {
                         braceHighlightRanges.push(getVSCodeRangeFromSpan(pc.document, highlightSpan));
                     }
 
-                    editor.setDecorations(this._braceHighlightDecorationType, braceHighlightRanges);
-                }
+                    /* asdf
+                                //let editor: vscode.TextEditor | undefined = vscode.window.activeTextEditor;
+            const editor = evt.textEditor;
+
+            //if (editor) {
+            let position = editor.selection.anchor;
+            // let pc: PositionContext | undefined =
+            //     await this.getPositionContext(editor.document, position, Cancellation.cantCancel);
+
+            //cancel.throwIfCancelled();
+
+            const { doc, associatedDoc } = await this.getDeploymentDocAndAssociatedDoc(editor.document, Cancellation.cantCancel); //asdf don't need associated doc
+            if (!doc) {
+                return undefined;
             }
-        });
+*/
+                    // cancel.throwIfCancelled();
+                    const pc = doc.getContextFromDocumentLineAndColumnIndexes(position.line, position.character, associatedDoc);
+
+                    if (pc instanceof TemplatePositionContext) {
+                        let tleBraceHighlightIndexes: number[] = TLE.BraceHighlighter.getHighlightCharacterIndexes(pc);
+
+                        let braceHighlightRanges: vscode.Range[] = [];
+                        for (let tleHighlightIndex of tleBraceHighlightIndexes) {
+                            const highlightSpan = new Span.Span(tleHighlightIndex + pc.jsonTokenStartIndex, 1);
+                            braceHighlightRanges.push(getVSCodeRangeFromSpan(pc.document, highlightSpan));
+                        }
+
+                        editor.setDecorations(this._braceHighlightDecorationType, braceHighlightRanges);
+
+                        function lineRange(line: number, start: number, end: number): vscode.Range {
+                            return new vscode.Range(line, start, line, end);
+                        }
+
+                        if (doc instanceof DeploymentTemplateDoc) {
+                            const ranges: vscode.Range[] = [];
+
+                            for (const res of doc.topLevelScope.resources) {
+                                const pos = doc.getDocumentPosition(res.span.startIndex);
+                                ranges.push(lineRange(pos.line, 10000, 10000));
+                            }
+                            editor.setDecorations(this.dec2, ranges);
+                            // //editor.setDecorations(this.dec1, [lineRange(100, 4, 0), lineRange(101, 4, 13)]);
+                            // editor.setDecorations(this.dec2, [lineRange(102, 100000, 0)]);
+                        }
+                    }
+                });
     }
 
     private onDocumentChanged(event: vscode.TextDocumentChangeEvent): void {
