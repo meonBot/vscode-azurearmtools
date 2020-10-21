@@ -374,6 +374,7 @@ export class AzureRMTools {
         // We want a normalized file path to use as key, but also need to differentiate documents with different URI schemes
         return `${documentUri.scheme}|${normalizePath(documentUri)}`;
     }
+
     // Add the deployment doc to our list of opened deployment docs
     private setOpenedDeploymentDocument(documentUri: vscode.Uri, deploymentDocument: DeploymentDocument | undefined): void {
         assert(documentUri);
@@ -418,6 +419,9 @@ export class AzureRMTools {
         // TODO: refactor
         // tslint:disable-next-line: cyclomatic-complexity max-func-body-length
         callWithTelemetryAndErrorHandlingSync('updateDeploymentDocument', (actionContext: IActionContext): void => {
+            // tslint:disable-next-line: no-console
+            console.log(`updateOpenedDocument: ${textDocument.uri}`);
+
             actionContext.errorHandling.suppressDisplay = true;
             actionContext.telemetry.suppressIfSuccessful = true;
             actionContext.telemetry.properties.isActivationEvent = 'true';

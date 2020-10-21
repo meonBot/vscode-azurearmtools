@@ -8,28 +8,41 @@ import { callWithTelemetryAndErrorHandling, parseError } from "vscode-azureexten
 import { ext } from "./extensionVariables";
 import { assert } from './fixed_assert';
 
+export interface IRequestOpenLinkedFileArgs {
+    sourceTemplateUri: string;
+    requestedLinkUri: string;
+    requestedLinkResolvedUri: string;
+    //requestId: string;
+    requestedLinkResolvedUriWithId: string;
+}
+
 /**
  * Handles a request from the language server to open a linked template
  * @param sourceTemplateUri The full URI of the template which contains the link
  * @param requestedLinkPath The full URI of the resolved link being requested
  */
-export async function onRequestOpenLinkedFile(sourceTemplateUri: string, _requestedLinkUri: string, requestedLinkResolvedUri: string): Promise<string | undefined> {
+export async function onRequestOpenLinkedFile({ sourceTemplateUri, requestedLinkResolvedUri, requestedLinkResolvedUriWithId }: IRequestOpenLinkedFileArgs): Promise<string | undefined> { //asdf returns error message
+    //asdf do we try to keep this file around for a while???
+
     //asdf what return?
     try {
         await callWithTelemetryAndErrorHandling('onRequetOpenLinkedFile', async () => { //asdf error handling
+            //asdf how properly handle paths like /proj/c#/file.txt?
             const sourceTemplatePathAsUri: Uri = Uri.parse(sourceTemplateUri, true); //asdf? what if not file:// ?
-            const requestedLinkPathAsUri: Uri = Uri.parse(requestedLinkResolvedUri, true); //asdf? what if not file:// ?
+            const requestedLinkPathAsUri: Uri = Uri.parse(requestedLinkResolvedUri, true); //asdf? what if not file:// ?   // e.g. 'file:///Users/stephenweatherford/repos/vscode-azurearmtools/test/templates/linkedTemplates/parent-child//linkedTemplates/linkedTemplate.json?linked=%2FUsers%2Fstephenweatherford%2Frepos%2Fvscode-azurearmtools%2Ftest%2Ftemplates%2FlinkedTemplates%2Fparent-child%2FmainTemplate.json'
 
             assert(path.isAbsolute(sourceTemplatePathAsUri.fsPath), "Internal error: sourceTemplateUri should be an absolute path");
             assert(path.isAbsolute(requestedLinkPathAsUri.fsPath), "Internal error: requestedLinkUri should be an absolute path");
 
-            ext.outputChannel.appendLine(`Opening linked file "${requestedLinkResolvedUri}" (linked from "${path.basename(sourceTemplatePathAsUri.fsPath)}")`);
+            const uri = Uri.parse(requestedLinkResolvedUriWithId); //asdf (= converted to %3D)
+            ext.outputChannel.appendLine(`Opening linked file "${uri}" in editor (linked from "${sourceTemplatePathAsUri.fsPath}")`);
 
             //asdf what if get multiple requests immediately?  do we care?
             // tslint:disable-next-line: no-floating-promises // Don't wait
-            await tryLoadLinkedFile(requestedLinkPathAsUri);
+            await tryLoadLinkedFile(uri);
         });
 
+        // No error message to return
         return undefined;
     } catch (err) {
         return parseError(err).message; //asdf?
@@ -46,17 +59,23 @@ export async function tryLoadLinkedFile(uri: Uri): Promise<void> {
     //asdf
     //await callWithTelemetryAndErrorHandling('tryLoadLinkedFile', async (actionContext: IActionContext) => { //asdf error handling
     try {
-        // Note: If the URI is already opened, returns the existing document
-        await window.withProgress(
+        await window.withProgress(//asdf?
             {
                 location: ProgressLocation.Window,
                 title: `Loading linked file ${uri.fsPath}`
             },
             async () => {
-                await workspace.openTextDocument(uri);
+                // Note: If the URI is already opened, returns the existing document
+                // tslint:disable-next-line: prefer-template
+                //uri = Uri.parse(uri.fsPath + "?a");
+                const doc = await workspace.openTextDocument(uri);
+                // tslint:disable-next-line: no-console
+                console.log(`... Opened: ${doc.uri}`);
+                ext.outputChannel.appendLine(`... Succeeded loading (or is already loaded) ${uri}`); //asdf
             });
         //asdf What if it's JSON?  Will auto language switch kick in?
     } catch (err) {
+        ext.outputChannel.appendLine(`... Failed loading ${uri.fsPath}: ${parseError(err).message}`);
         throw new Error(parseError(err).message); //asdf what UI experience? put in error list?  asdf wrap error
     }
     //});
