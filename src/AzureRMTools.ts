@@ -151,6 +151,19 @@ export class AzureRMTools {
         }
     });
 
+    private readonly _linkContextDecorationType: vscode.TextEditorDecorationType = vscode.window.createTextEditorDecorationType({
+        // borderWidth: "1px",
+        // borderStyle: "solid",
+        // light: {
+        //     borderColor: "rgba(0, 0, 0, 0.2)",
+        //     backgroundColor: "rgba(0, 0, 0, 0.05)"
+        // },
+        // dark: {
+        //     borderColor: "rgba(128, 128, 128, 0.5)",
+        //     backgroundColor: "rgba(128, 128, 128, 0.1)"
+        // }
+    });
+
     // tslint:disable-next-line: max-func-body-length
     constructor(context: vscode.ExtensionContext) {
         const jsonOutline: JsonOutlineProvider = new JsonOutlineProvider(context);
@@ -471,6 +484,50 @@ export class AzureRMTools {
                             // The document will be reloaded, firing this event again with the new langid
                             AzureRMTools.setLanguageToArm(textDocument, actionContext);
                             return;
+                        }
+                    }
+
+                    //const startColor1 = "#c0c000";
+                    // const startColor2 = "rgb(50,192,50)";
+                    // const endColor = "#D8D8E080";
+                    const margin = "0 0 0 1em";
+
+                    if (editor && editor.document === textDocument) {
+                        // Link context decorations
+                        {
+                            const options1: vscode.DecorationOptions[] = [];
+
+                            const startPos = deploymentTemplate.getDocumentPosition(0);
+                            const hoverMessage = new vscode.MarkdownString();
+                            hoverMessage.appendMarkdown("### Main template: [main.json](command:azurerm-vscode-tools.openTemplateFile)\n");
+                            hoverMessage.appendMarkdown("... [linkedTemplate1.json] linked from [main.json:873](command:azurerm-vscode-tools.openTemplateFile)  \n");
+                            hoverMessage.appendMarkdown("... [linkedTemplate2.json] linked from [linkedTemplate1.json:471](command:azurerm-vscode-tools.openTemplateFile)  \n");
+                            hoverMessage.appendMarkdown("... This file linked from [linkedTemplate2.json:128](command:azurerm-vscode-tools.openTemplateFile)  \n");
+                            hoverMessage.isTrusted = true;
+
+                            options1.push({
+                                range: new vscode.Range(startPos.line, Number.MAX_SAFE_INTEGER, startPos.line, Number.MAX_SAFE_INTEGER),
+                                //hoverMessage: new vscode.MarkdownString("This  \nis the  \nfull<br>call\ntree"),
+                                hoverMessage: hoverMessage,
+                                renderOptions: {
+                                    after: {
+                                        color: "#e0e0e0",
+                                        contentText: `Linked from /User/whoever/repo/vscode-azuretools/templates/linked-templates/main.json:873`,
+                                        fontStyle: "italic",
+                                        //margin: "22em  22em 0 0 ",
+                                        //height: "200px",
+                                        //width: "25px",
+                                        //backgroundColor: "blue",
+                                        //borderColor: "red",
+                                        border: "outset",
+                                        borderColor: "#4080C0",
+                                        margin: margin
+
+                                    }
+                                }
+                            });
+
+                            editor.setDecorations(this._linkContextDecorationType, options1);
                         }
                     }
 
