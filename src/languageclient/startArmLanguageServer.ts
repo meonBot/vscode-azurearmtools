@@ -137,7 +137,7 @@ export async function startLanguageClient(serverDllPath: string, dotnetExePath: 
             middleware: {
                 handleDiagnostics: (uri: Uri, diagnostics: Diagnostic[], _next: (uri: Uri, diagnostics: Diagnostic[]) => void): void => {
                     let a = 1;
-                    a = 2;
+                    a = a;
                     diagnostics.push(
                         {
                             message: `hi from middleware for ${uri.toString()}`,
