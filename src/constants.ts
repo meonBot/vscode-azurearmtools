@@ -15,6 +15,13 @@ export const basePath = path.join(__dirname, isWebpack ? "" : "..", "..");
 export const assetsPath = path.join(basePath, "assets");
 export const iconsPath = path.join(basePath, "icons");
 
+export namespace documentSchemes {
+    export const file: string = 'file'; // Locally-saved files
+    export const untitled: string = 'untitled';  // unsaved files
+    export const linkedTemplate = 'linked-template'; // For our ITextDocumentContentProvider that serves HTTP documents
+    export const git = 'git';
+}
+
 export const languageServerName = 'ARM Template Language Server';
 export const languageFriendlyName = 'Azure Resource Manager Template';
 export const armTemplateLanguageId = 'arm-template';
@@ -50,6 +57,28 @@ export namespace configKeys {
     export const enableCodeLens = 'codelens.enable';
     export const codeLensForParameters = 'codelens.parameters';
     export const codeLensForResourceParentsAndChildren = 'codelens.resourceChildren';
+}
+
+export namespace notifications {
+    export const requestOpenLinkedTemplate = 'arm-template/requestOpenLinkedTemplate';
+    export const notifyTemplateGraph = 'arm-template/notifyTemplateGraph';
+    export const schemaValidationNotification = 'arm-template/schemaValidation';
+
+    export interface ISchemaValidationNotificationArgs {
+        uri: string;
+        completed: boolean;
+    }
+
+    export namespace Diagnostics {
+        export const codeAnalysisStarting = 'arm-template/diag-codeAnalysisStarting';
+
+        export interface ICodeAnalysisStartingArgs {
+            uri: string;
+            docVersion: number;
+            codeAnalysisVersion: number;
+
+        }
+    }
 }
 
 export namespace globalStateKeys {
@@ -101,8 +130,12 @@ export namespace templateKeys {
 
     // Linked templates
     export const linkedDeploymentTemplateLink = 'templateLink';
+    export const linkedDeploymentTemplateLinkUri = 'uri';
+    export const linkedDeploymentTemplateLinkRelativePath = 'relativePath';
 
     // User functions
     export const userFunctionNamespace = 'namespace';
     export const userFunctionMembers = 'members';
 }
+
+export const deploymentsResourceTypeLC: string = 'microsoft.resources/deployments';

@@ -4,9 +4,9 @@
 
 // tslint:disable:object-literal-key-quotes no-http-string max-func-body-length
 
-import { isWin32 } from "../../extension.bundle";
 import { diagnosticSources, testDiagnostics, testDiagnosticsFromFile } from "../support/diagnostics";
 import { testWithLanguageServer, testWithLanguageServerAndRealFunctionMetadata } from "../support/testWithLanguageServer";
+import { isWin32 } from "../testConstants";
 
 suite("Validation regression tests", () => {
     testWithLanguageServer("Template validation error for evaluated variables (https://github.com/microsoft/vscode-azurearmtools/issues/380)", async () =>
@@ -318,7 +318,9 @@ suite("Validation regression tests", () => {
         }
     ]
 }`,
-                {},
+                {
+                    ignoreInfos: true,
+                },
                 [
                     "Warning: Value must be one of the following values: \"Storage\", \"StorageV2\", \"BlobStorage\", \"FileStorage\", \"BlockBlobStorage\" (arm-template (schema)) [20,29-20,35]",
                     "Warning: Value must be one of the following values: \"Storage\", \"StorageV2\", \"BlobStorage\", \"FileStorage\", \"BlockBlobStorage\" (arm-template (schema)) [35,13-35,19]",
@@ -407,7 +409,8 @@ suite("Validation regression tests", () => {
                                 "value": "paramFromOuter"
                             }
                         }
-                    }
+                    },
+                    ignoreInfos: true,
                 },
                 [
                 ]
@@ -485,7 +488,8 @@ suite("Validation regression tests", () => {
                             "value": "value"
                         }
                     }
-                }
+                },
+                ignoreInfos: true,
             },
             [
             ])
@@ -613,6 +617,8 @@ suite("Validation regression tests", () => {
                 'templates/regression/1060-rg.json',
                 {
                     parametersFile: 'templates/regression/1060-rg.parameters.json',
+                    // Schema errors are expected
+                    ignoreSources: [diagnosticSources.schema],
                 },
                 [
                     `Error: Template validation failed: The template resource 'mgname-test' at line '14' and column '9' is not valid: The language expression property 'location' doesn't exist, available properties are 'name, properties'.. Please see https://aka.ms/arm-template-expressions for usage details. (arm-template (validation))`
@@ -624,7 +630,7 @@ suite("Validation regression tests", () => {
         await testDiagnostics(
             'templates/regression/1060-mg.json',
             {
-                parametersFile: 'templates/regression/1060-mg.parameters.json',
+                parametersFile: 'templates/regression/1060-mg.parameters.json'
             },
             [
             ]);
@@ -639,6 +645,18 @@ suite("Validation regression tests", () => {
             },
             [
                 "Warning: The variable 'someTag' is never used. (arm-template (expressions)) [7,9-7,18]"
+            ]);
+    });
+
+    // https://github.com/microsoft/vscode-azurearmtools/issues/967
+    testWithLanguageServer(`#967 Validation needs to recognize new top-level "scope" property `, async () => {
+        await testDiagnostics(
+            'templates/regression/967-nested-with-scope-property.json',
+            {
+                parametersFile: 'templates/regression/967-nested-with-scope-property.parameters.json',
+                includeSources: [diagnosticSources.backendValidation]
+            },
+            [
             ]);
     });
 
